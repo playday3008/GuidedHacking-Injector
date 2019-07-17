@@ -1,69 +1,312 @@
 #include "Injection.h"
 #pragma comment (lib, "Psapi.lib")
 
-DWORD LastError = INJ_ERR_SUCCESS;
-DWORD g_TID		= 0;
-HWND g_hWnd		= NULL;
+DWORD InitErrorStruct(const wchar_t * szDllPath, INJECTIONDATAW * pData, bool bNative, DWORD RetVal);
 
-DWORD LoadLibraryStub	(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut);
-DWORD ManualMap			(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut);
-DWORD LdrLoadDllStub	(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut);
+DWORD InjectDLL(const wchar_t * szDllFile, HANDLE hProc, INJECTION_MODE im, LAUNCH_METHOD Method, DWORD Flags, DWORD & LastError, HINSTANCE & hOut);
 
-DWORD Cloaking			(HANDLE hProc, DWORD Flags, HINSTANCE hMod);
+DWORD _LoadLibrary	(const wchar_t * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut, DWORD & LastError);
+DWORD _LdrLoadDll	(const wchar_t * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut, DWORD & LastError);
+DWORD _ManualMap	(const wchar_t * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut, DWORD & LastError);
+
+DWORD Cloaking			(HANDLE hProc, DWORD Flags, HINSTANCE hMod, DWORD & LastError);
 
 HINSTANCE __stdcall LoadLibraryShell	(LOAD_LIBRARY_DATA		* pData);
+DWORD LoadLibraryShell_End();
 HINSTANCE __stdcall LdrLoadDllShell		(LDR_LOAD_DLL_DATA		* pData);
+DWORD LdrLoadDllShell_End();
 HINSTANCE __stdcall ManualMapShell		(MANUAL_MAPPING_DATA	* pData);
+DWORD ManualMapShell_End();
 
-DWORD InjectDLL(const char * szDllFile, HANDLE hProc, INJECTION_MODE im, LAUNCH_METHOD Method, DWORD Flags, DWORD * ErrorCode)
-{	
-	if (!szDllFile)
-		return INJ_ERR_FILE_DOESNT_EXIST;
+DWORD InitErrorStruct(const wchar_t * szDllPath, INJECTIONDATAW * pData, bool bNative, DWORD RetVal)
+{
+	if (!RetVal)
+		return INJ_ERR_SUCCESS;
 
-	char szPathBuffer[MAX_PATH]{ 0 };
-	if (szDllFile[1] != ':')
+	ERROR_INFO info{ 0 };
+	info.szDllFileName		= szDllPath;
+	info.TargetProcessId	= pData->ProcessID;
+	info.InjectionMode		= pData->Mode;
+	info.LaunchMethod		= pData->Method;
+	info.Flags				= pData->Flags;
+	info.ErrorCode			= RetVal;
+	info.LastWin32Error		= pData->LastErrorCode;
+	info.HandleValue		= pData->hHandleValue;
+	info.bNative			= bNative;
+
+	ErrorLog(&info);
+
+	return RetVal;
+}
+
+DWORD __stdcall InjectA(INJECTIONDATAA * pData)
+{
+#pragma EXPORT_FUNCTION(__FUNCTION__, __FUNCDNAME__)
+	
+	if (!pData->szDllPath)
+		return InitErrorStruct(nullptr, ReCa<INJECTIONDATAW*>(pData), false, INJ_ERR_INVALID_FILEPATH);
+	
+	INJECTIONDATAW data{ 0 };
+	size_t len_out = 0;
+	size_t max_len = sizeof(data.szDllPath) / sizeof(wchar_t);
+	StringCchLengthA(pData->szDllPath, max_len, &len_out);
+	mbstowcs_s(&len_out, const_cast<wchar_t*>(data.szDllPath), max_len, pData->szDllPath, max_len);
+
+	data.ProcessID		= pData->ProcessID;
+	data.Mode			= pData->Mode;
+	data.Method			= pData->Method;
+	data.Flags			= pData->Flags;
+	data.hHandleValue	= pData->hHandleValue;
+
+	return InjectW(&data);	
+}
+
+DWORD __stdcall InjectW(INJECTIONDATAW * pData)
+{
+#pragma EXPORT_FUNCTION(__FUNCTION__, __FUNCDNAME__)
+
+	DWORD ErrOut = 0;
+	
+	if (!pData->szDllPath)
+		return InitErrorStruct(nullptr, pData, false, INJ_ERR_INVALID_FILEPATH);
+
+	const wchar_t * szDllPath = pData->szDllPath;
+
+	if (!pData->ProcessID)
+		return InitErrorStruct(szDllPath, pData, false, INJ_ERR_INVALID_PID);
+
+	if (!FileExists(szDllPath))
 	{
-		GetFullPathNameA(szDllFile, MAX_PATH, szPathBuffer, nullptr);
-		szDllFile = szPathBuffer;
+		pData->LastErrorCode = GetLastError();
+		return InitErrorStruct(szDllPath, pData, false, INJ_ERR_FILE_DOESNT_EXIST);
 	}
 
+	HANDLE hProc = nullptr;
+	if (pData->Flags & INJ_HIJACK_HANDLE)
+	{
+		if (pData->hHandleValue) 
+		{
+			hProc = (HANDLE)(UINT_PTR)pData->hHandleValue;
+		}
+		else
+		{
+			auto handles = FindProcessHandles(pData->ProcessID, PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION);
+			if (handles.empty())
+			{
+				return InitErrorStruct(szDllPath, pData, false, INJ_ERR_NO_HANDLES);
+			}
+			
+			HANDLE hTargetProc = nullptr;
+			handle_data handle{ 0 };
+			for (auto i : handles)
+			{
+				hTargetProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, i.OwnerPID);
+				if (hTargetProc)
+				{
+					if (IsNativeProcess(hTargetProc) && IsElevatedProcess(hTargetProc))
+					{
+						handle = i;
+						break;
+					}
+					CloseHandle(hTargetProc);
+					hTargetProc = nullptr;
+				}
+			}
+
+			if (!handle.OwnerPID)
+			{
+				CloseHandle(hTargetProc);
+				return InitErrorStruct(szDllPath, pData, false, INJ_ERR_HIJACK_NO_NATIVE_HANDLE);
+			}
+			
+			if (!hTargetProc)
+			{
+				pData->LastErrorCode = GetLastError();
+				return InitErrorStruct(szDllPath, pData, false, INJ_ERR_CANT_OPEN_OWNER_PROC);
+			}
+			
+			HINSTANCE hInjectionModuleEx = GetModuleHandleExA(hTargetProc, GH_INJ_MOD_NAMEA);
+
+			if (!hInjectionModuleEx)
+			{
+				INJECTIONDATAW hijack_data{ 0 };
+				hijack_data.ProcessID = handle.OwnerPID;
+				hijack_data.Mode = IM_LoadLibrary;
+				hijack_data.Method = LM_NtCreateThreadEx;
+				GetOwnModulePath(const_cast<wchar_t*>(hijack_data.szDllPath), sizeof(hijack_data.szDllPath) / sizeof(szDllPath[0]));
+				StringCbCatW(const_cast<wchar_t*>(hijack_data.szDllPath), sizeof(hijack_data.szDllPath), GH_INJ_MOD_NAMEW);
+
+				DWORD inj_ret = InjectW(&hijack_data);
+
+				if (inj_ret || !hijack_data.hDllOut)
+				{
+					CloseHandle(hTargetProc);
+					return InitErrorStruct(szDllPath, &hijack_data, true, INJ_ERR_HIJACK_INJ_FAILED);
+				}
+			}
+
+			hInjectionModuleEx = GetModuleHandleExA(hTargetProc, GH_INJ_MOD_NAMEA);
+			if (!hInjectionModuleEx)
+			{
+				CloseHandle(hTargetProc);
+				return InitErrorStruct(szDllPath, pData, true, INJ_ERR_HIJACK_INJECTW_MISSING);
+			}
+
+			void * pRemoteInjectW = nullptr;
+			bool bLoaded = GetImportA(hInjectionModuleEx, GH_INJ_MOD_NAMEA, "InjectW", pRemoteInjectW);
+			if (!bLoaded)
+			{
+				EjectDll(hTargetProc, hInjectionModuleEx);
+				CloseHandle(hTargetProc);
+				return InitErrorStruct(szDllPath, pData, true, INJ_ERR_HIJACK_INJECTW_MISSING);
+			}
+			
+			pData->hHandleValue = (DWORD)handle.hValue;
+
+			void * pArg = VirtualAllocEx(hTargetProc, nullptr, sizeof(INJECTIONDATAW), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+			if (!pArg)
+			{
+				pData->LastErrorCode = GetLastError();
+				EjectDll(hTargetProc, hInjectionModuleEx);
+				CloseHandle(hTargetProc);
+
+				return InitErrorStruct(szDllPath, pData, true, INJ_ERR_HIJACK_CANT_ALLOC);
+			}
+
+			if (!WriteProcessMemory(hTargetProc, pArg, pData, sizeof(INJECTIONDATAW), nullptr))
+			{				
+				pData->LastErrorCode = GetLastError();
+
+				VirtualFreeEx(hTargetProc, pArg, 0, MEM_RELEASE);
+				EjectDll(hTargetProc, hInjectionModuleEx);
+				CloseHandle(hTargetProc);
+
+				return InitErrorStruct(szDllPath, pData, true, INJ_ERR_HIJACK_CANT_WPM);
+			}
+
+			DWORD win32err = 0;
+			HINSTANCE hOut = NULL;
+			DWORD remote_ret = StartRoutine(hTargetProc, pRemoteInjectW, pArg, LM_NtCreateThreadEx, true, CC_STDCALL, win32err, hOut);
+			
+			VirtualFreeEx(hTargetProc, pArg, 0, MEM_RELEASE);
+			EjectDll(hTargetProc, hInjectionModuleEx);
+			CloseHandle(hTargetProc);
+			
+			if (remote_ret == SR_ERR_SUCCESS && win32err)
+			{
+				DWORD remote_error = (DWORD)((UINT_PTR)hOut & 0xFFFFFFFF);
+				pData->LastErrorCode = remote_error;
+				return InitErrorStruct(szDllPath, pData, true, win32err);
+			}
+		
+			pData->LastErrorCode = win32err;
+			return InitErrorStruct(szDllPath, pData, true, remote_ret);
+		}
+	}
+	else
+	{
+		hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pData->ProcessID);
+		if (!hProc)
+		{
+			pData->LastErrorCode = GetLastError();
+			return InitErrorStruct(szDllPath, pData, false, INJ_ERR_CANT_OPEN_PROCESS);
+		}
+	}
+
+	DWORD handle_info = 0;
+	if (!hProc || !GetHandleInformation(hProc, &handle_info))
+	{
+		pData->LastErrorCode = GetLastError();
+		return InitErrorStruct(szDllPath, pData, false, INJ_ERR_INVALID_PROC_HANDLE);
+	}
+
+	bool native_target = true;
+#ifdef _WIN64
+	native_target = IsNativeProcess(hProc);
+	if (native_target)
+	{
+		ErrOut = ValidateFile(szDllPath, IMAGE_FILE_MACHINE_AMD64);
+	}
+	else
+	{
+		ErrOut = ValidateFile(szDllPath, IMAGE_FILE_MACHINE_I386);
+	}
+#else
+	ErrOut = ValidateFile(szDllPath, IMAGE_FILE_MACHINE_I386);
+#endif
+
+	if (ErrOut)
+	{
+		pData->LastErrorCode = ErrOut;
+			return InitErrorStruct(szDllPath, pData, native_target, INJ_ERR_PLATFORM_MISMATCH);
+	}
+	
+	HINSTANCE hOut	= NULL;
+	DWORD RetVal	= INJ_ERR_SUCCESS;
+#ifdef _WIN64
+	if (!native_target)
+	{
+		RetVal = InjectDLL_WOW64(szDllPath, hProc, pData->Mode, pData->Method, pData->Flags, ErrOut, hOut);
+	}
+	else
+	{		
+		RetVal = InjectDLL(szDllPath, hProc, pData->Mode, pData->Method, pData->Flags, ErrOut, hOut);
+	}	
+#else
+	RetVal = InjectDLL(szDllPath, hProc, pData->Mode, pData->Method, pData->Flags, ErrOut, hOut);
+#endif
+
+	if (!(pData->Flags & INJ_HIJACK_HANDLE))
+		CloseHandle(hProc);
+	
+	pData->LastErrorCode	= ErrOut;
+	pData->hDllOut			= hOut;
+
+	return InitErrorStruct(szDllPath, pData, native_target, RetVal);
+}
+
+DWORD InjectDLL(const wchar_t * szDllFile, HANDLE hProc, INJECTION_MODE im, LAUNCH_METHOD Method, DWORD Flags, DWORD & LastError, HINSTANCE & hOut)
+{
 	if (Flags & INJ_LOAD_DLL_COPY)
 	{
-		const char * pFileName = szDllFile;
-		pFileName += strlen(pFileName) - 1;
-		while (*(pFileName - 1) != '\\')
-			--pFileName;
-		
-		char new_path[MAX_PATH]{ 0 };
-		GetTempPathA(MAX_PATH, new_path);
-		strcat_s(new_path, pFileName);
+		size_t len_out = 0;
+		StringCchLengthW(szDllFile, STRSAFE_MAX_CCH, &len_out);
 
-		CopyFileA(szDllFile, new_path, FALSE);
+		const wchar_t * pFileName = szDllFile;
+		pFileName += len_out - 1;
+		while (*(pFileName-- - 2) != '\\');
+		
+		wchar_t new_path[MAXPATH_IN_TCHAR]{ 0 };
+		GetTempPathW(MAXPATH_IN_TCHAR, new_path);
+		StringCchCatW(new_path, MAXPATH_IN_TCHAR, pFileName);
+
+		CopyFileW(szDllFile, new_path, FALSE);
 
 		szDllFile = new_path;
 	}
 
 	if (Flags & INJ_SCRAMBLE_DLL_NAME)
 	{
-		char new_name[15]{ 0 };
+		wchar_t new_name[15]{ 0 };
+		srand(GetTickCount() + rand() + Flags + LOWORD(hProc));
+
 		for (UINT i = 0; i != 10; ++i)
 		{
-			srand(GetTickCount() + rand() + Flags + LOWORD(hProc));
 			auto val = rand() % 3;
 			if (val == 0)
 			{
 				val = rand() % 10;
-				new_name[i] = char('0' + val);
+				new_name[i] = wchar_t('0' + val);
 			}
 			else if (val == 1)
 			{
-				val = rand() % 10;
-				new_name[i] = char('A' + val);
+				val = rand() % 26;
+				new_name[i] = wchar_t('A' + val);
 			}
 			else
 			{
-				val = rand() % 10;
-				new_name[i] = char('a' + val);
+				val = rand() % 26;
+				new_name[i] = wchar_t('a' + val);
 			}
 		}
 		new_name[10] = '.';
@@ -72,70 +315,61 @@ DWORD InjectDLL(const char * szDllFile, HANDLE hProc, INJECTION_MODE im, LAUNCH_
 		new_name[13] = 'l';
 		new_name[14] = '\0';
 
-		char OldFilePath[MAX_PATH]{ 0 };
-		strcpy_s(OldFilePath, szDllFile);
+		wchar_t OldFilePath[MAXPATH_IN_TCHAR]{ 0 };
+		StringCchCopyW(OldFilePath, MAXPATH_IN_TCHAR, szDllFile);
 
-		char * pFileName = const_cast<char*>(szDllFile);
-		pFileName += strlen(pFileName);
-		while (*(pFileName - 1) != '\\')
-			--pFileName;
+		wchar_t * pFileName = const_cast<wchar_t*>(szDllFile);
+		size_t len_out = 0;
+		StringCchLengthW(szDllFile, STRSAFE_MAX_CCH, &len_out);
+		pFileName += len_out;
+		while (*(pFileName-- - 2) != '\\');
 
-		memcpy(pFileName, new_name, 15);
+		memcpy(pFileName, new_name, 15 * sizeof(wchar_t));
 
-		rename(OldFilePath, szDllFile);
+		_wrename(OldFilePath, szDllFile);
 	}
 
 	DWORD Ret = 0;
 
-	HINSTANCE hOut = NULL;
-
 	switch (im)
 	{
 		case IM_LoadLibrary:
-			Ret = LoadLibraryStub(szDllFile, hProc, Method, Flags, hOut);
+			Ret = _LoadLibrary(szDllFile, hProc, Method, Flags, hOut, LastError);
 			break;
 
 		case IM_LdrLoadDll:
-			Ret = LdrLoadDllStub(szDllFile, hProc, Method, Flags, hOut);
+			Ret = _LdrLoadDll(szDllFile, hProc, Method, Flags, hOut, LastError);
 			break;
 
 		case IM_ManualMap:
-			Ret = ManualMap(szDllFile, hProc, Method, Flags, hOut);
+			Ret = _ManualMap(szDllFile, hProc, Method, Flags, hOut, LastError);
 	}
 
 	if (Ret == INJ_ERR_SUCCESS && hOut && im != IM_ManualMap)
-		Ret = Cloaking(hProc, Flags, hOut);
-
-	if (ErrorCode)
-		*ErrorCode = LastError;
-
+		Ret = Cloaking(hProc, Flags, hOut, LastError);
+	
 	return Ret;
 }
 
-DWORD LoadLibraryStub(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut)
+DWORD _LoadLibrary(const wchar_t * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut, DWORD & LastError)
 {
-	if (!hProc)
-		return INJ_ERR_INVALID_PROC_HANDLE;
-
-	if (!FileExistsA(szDllFile))
-	{
-		return INJ_ERR_FILE_DOESNT_EXIST;
-	}
-
 	LOAD_LIBRARY_DATA data{ 0 };
-	size_t len = _strlenA(szDllFile);
-	memcpy(data.szDll, szDllFile, len);
+	StringCchCopyW(data.szDll, sizeof(data.szDll) / sizeof(wchar_t), szDllFile);
 
-	void * pLoadLibraryA = nullptr;
-	if (!GetImportA(hProc, "kernel32.dll", "LoadLibraryA", pLoadLibraryA))
+	void * pLoadLibraryExW = nullptr;
+	char sz_LoadLibName[] = "LoadLibraryExW";
+
+	if (!GetImportA(hProc, "kernel32.dll", sz_LoadLibName, pLoadLibraryExW))
 	{
 		LastError = GetLastError();
 		return INJ_ERR_REMOTEFUNC_MISSING;
 	}
 	
-	data.pLoadLibraryA = ReCa<f_LoadLibraryA*>(pLoadLibraryA);
+	data.pLoadLibraryExW = ReCa<f_LoadLibraryExW*>(pLoadLibraryExW);
 
-	BYTE * pArg = ReCa<BYTE*>(VirtualAllocEx(hProc, nullptr, sizeof(LOAD_LIBRARY_DATA) + 0x100, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+	size_t ShellSize = (UINT_PTR)LoadLibraryShell_End - (UINT_PTR)LoadLibraryShell;
+
+	BYTE * pArg = ReCa<BYTE*>(VirtualAllocEx(hProc, nullptr, sizeof(LOAD_LIBRARY_DATA) + ShellSize + 0x10, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
 	if (!pArg)
 	{
 		LastError = GetLastError();
@@ -152,7 +386,7 @@ DWORD LoadLibraryStub(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method
 	}
 
 	auto * pShell = ReCa<BYTE*>(ALIGN_UP(ReCa<UINT_PTR>(pArg + sizeof(LOAD_LIBRARY_DATA)), 0x10));
-	if (!WriteProcessMemory(hProc, pShell, LoadLibraryShell, 0x100, nullptr))
+	if (!WriteProcessMemory(hProc, pShell, LoadLibraryShell, ShellSize, nullptr))
 	{
 		LastError = GetLastError();
 
@@ -161,7 +395,7 @@ DWORD LoadLibraryStub(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method
 		return INJ_ERR_WPM_FAIL;
 	}
 	
-	DWORD dwRet = StartRoutine(hProc, pShell, pArg, Method, (Flags & INJ_HIDE_THREAD_FROM_DEBUGGER) != 0, CC_STDCALL, LastError, hOut);
+	DWORD dwRet = StartRoutine(hProc, pShell, pArg, Method, (Flags & INJ_THREAD_CREATE_CLOAKED) != 0, CC_STDCALL, LastError, hOut);
 	
 	if(Method != LM_QueueUserAPC)
 		VirtualFreeEx(hProc, pArg, 0, MEM_RELEASE);
@@ -169,33 +403,15 @@ DWORD LoadLibraryStub(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method
 	return dwRet;
 }
 
-DWORD LdrLoadDllStub(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut)
+DWORD _LdrLoadDll(const wchar_t * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut, DWORD & LastError)
 {
-	if (!hProc)
-		return INJ_ERR_INVALID_PROC_HANDLE;
-
-	if (!szDllFile)
-		return INJ_ERR_FILE_DOESNT_EXIST;
-
-	char szPathBuffer[MAX_PATH]{ 0 };
-	if (szDllFile[1] != ':')
-	{
-		GetFullPathNameA(szDllFile, MAX_PATH, szPathBuffer, nullptr);
-		szDllFile = szPathBuffer;
-	}
-
-	if (!FileExistsA(szDllFile))
-	{
-		return INJ_ERR_FILE_DOESNT_EXIST;
-	}
+	size_t size_out = 0;
 
 	LDR_LOAD_DLL_DATA data{ 0 };
-	data.pModuleFileName.szBuffer	= ReCa<wchar_t*>(data.Data);
-	data.pModuleFileName.MaxLength	= MAX_PATH * 2;
-
-	size_t len = _strlenA(szDllFile);
-	mbstowcs_s(&len, data.pModuleFileName.szBuffer, len + 1, szDllFile, len);
-	data.pModuleFileName.Length = (WORD)(len * 2) - 2;
+	data.pModuleFileName.MaxLength = sizeof(data.Data);
+	StringCbLengthW(szDllFile, data.pModuleFileName.MaxLength, &size_out);
+	StringCbCopyW(ReCa<wchar_t*>(data.Data), data.pModuleFileName.MaxLength, szDllFile);
+	data.pModuleFileName.Length = (WORD)size_out;
 
 	void * pLdrLoadDll = nullptr;
 	if (!GetImportA(hProc, "ntdll.dll", "LdrLoadDll", pLdrLoadDll))
@@ -203,10 +419,15 @@ DWORD LdrLoadDllStub(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method,
 		LastError = GetLastError();
 		return INJ_ERR_LDRLOADDLL_MISSING;
 	}
-	
 	data.pLdrLoadDll = ReCa<f_LdrLoadDll>(pLdrLoadDll);
 
-	BYTE * pArg = ReCa<BYTE*>(VirtualAllocEx(hProc, nullptr, sizeof(LDR_LOAD_DLL_DATA) + 0x200, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+	
+
+	size_t ShellSize = (UINT_PTR)LdrLoadDllShell_End - (UINT_PTR)LdrLoadDllShell;
+	BYTE * pAllocBase = ReCa<BYTE*>(VirtualAllocEx(hProc, nullptr, sizeof(LDR_LOAD_DLL_DATA) + ShellSize + 0x10, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+	BYTE * pArg		= pAllocBase;
+	BYTE * pFunc	= ReCa<BYTE*>(ALIGN_UP(ReCa<UINT_PTR>(pArg) + sizeof(LDR_LOAD_DLL_DATA), 0x10));
+
 	if (!pArg)
 	{
 		LastError = GetLastError();
@@ -220,39 +441,24 @@ DWORD LdrLoadDllStub(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method,
 		return INJ_ERR_WPM_FAIL;
 	}
 
-	if (!WriteProcessMemory(hProc,pArg + sizeof(LDR_LOAD_DLL_DATA), LdrLoadDllShell, 0x100, nullptr))
+	if (!WriteProcessMemory(hProc, pFunc, LdrLoadDllShell, ShellSize, nullptr))
 	{
 		LastError = GetLastError();
 		VirtualFreeEx(hProc, pArg, 0, MEM_RELEASE);
 		return INJ_ERR_WPM_FAIL;
 	}
 
-	DWORD dwRet = StartRoutine(hProc, pArg + sizeof(LDR_LOAD_DLL_DATA), pArg, Method, (Flags & INJ_HIDE_THREAD_FROM_DEBUGGER) != 0, CC_STDCALL, LastError, hOut);
-	
+	DWORD dwRet = StartRoutine(hProc, pFunc, pArg, Method, (Flags & INJ_THREAD_CREATE_CLOAKED) != 0, CC_STDCALL, LastError, hOut);
+	ReadProcessMemory(hProc, pArg, &data, sizeof(data), nullptr);
+
 	if(Method != LM_QueueUserAPC)
 		VirtualFreeEx(hProc, pArg, 0, MEM_RELEASE);
 
 	return dwRet;
 }
 
-DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut)
+DWORD _ManualMap(const wchar_t * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWORD Flags, HINSTANCE & hOut, DWORD & LastError)
 {
-	if (!hProc)
-		return INJ_ERR_INVALID_PROC_HANDLE;
-
-	if (!szDllFile)
-		return INJ_ERR_FILE_DOESNT_EXIST;
-
-	char szPathBuffer[MAX_PATH]{ 0 };
-	if (szDllFile[1] != ':')
-	{
-		GetFullPathNameA(szDllFile, MAX_PATH, szPathBuffer, nullptr);
-		szDllFile = szPathBuffer;
-	}
-
-	if (!FileExistsA(szDllFile))
-		return INJ_ERR_FILE_DOESNT_EXIST;
-	
 	BYTE *					pSrcData		= nullptr;
 	IMAGE_NT_HEADERS *		pOldNtHeader	= nullptr;
 	IMAGE_OPTIONAL_HEADER * pOldOptHeader	= nullptr;
@@ -261,12 +467,13 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 	BYTE *					pAllocBase		= nullptr;
 	BYTE *					pTargetBase		= nullptr;
 	BYTE *					pArg			= nullptr;
+	BYTE *					pFunc			= nullptr;
 
 	std::ifstream File(szDllFile, std::ios::binary | std::ios::ate);
 
 	auto FileSize = File.tellg();
 
-	pSrcData = new BYTE[static_cast<UINT_PTR>(FileSize)];
+	pSrcData = new BYTE[static_cast<size_t>(FileSize)];
 
 	if (!pSrcData)
 	{
@@ -289,15 +496,19 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 		ShiftOffset = rand() % 0x1000 + 0x100;
 	}
 
-	auto AllocSize = pOldOptHeader->SizeOfImage + ShiftOffset + sizeof(MANUAL_MAPPING_DATA) + 0x100;
+	size_t ShellSize	= (UINT_PTR)ManualMapShell_End - (UINT_PTR)ManualMapShell;
+	auto AllocSize		= ShiftOffset + pOldOptHeader->SizeOfImage + sizeof(MANUAL_MAPPING_DATA) + ShellSize + 0x30;
+
 	pAllocBase = ReCa<BYTE*>(VirtualAllocEx(hProc, ReCa<void*>(pOldOptHeader->ImageBase), AllocSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
 	if (!pAllocBase)
 		pAllocBase = ReCa<BYTE*>(VirtualAllocEx(hProc, nullptr, AllocSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
 
 	if (!pAllocBase)
 	{
-		delete[] pSrcData;
 		LastError = GetLastError();
+
+		delete[] pSrcData;
+
 		return INJ_ERR_CANT_ALLOC_MEM;
 	}
 	
@@ -305,9 +516,11 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 
 	if (!pLocalBase)
 	{
-		delete[] pSrcData;
 		LastError = GetLastError();
+
+		delete[] pSrcData;
 		VirtualFreeEx(hProc, pAllocBase, 0, MEM_RELEASE);
+
 		return INJ_ERR_OUT_OF_MEMORY;
 	}
 
@@ -328,9 +541,10 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 		delete[] pJunk;
 	}
 
-	pArg = ReCa<BYTE*>(ALIGN_UP(ReCa<UINT_PTR>(pAllocBase + ShiftOffset), 0x10));
-	pTargetBase = ReCa<BYTE*>(ALIGN_IMAGE_BASE(ReCa<UINT_PTR>(pArg + sizeof(MANUAL_MAPPING_DATA))));
-	
+	pTargetBase = ReCa<BYTE*>(ALIGN_IMAGE_BASE	(ReCa<UINT_PTR>(pAllocBase)		+ ShiftOffset));
+	pArg		= ReCa<BYTE*>(ALIGN_UP			(ReCa<UINT_PTR>(pTargetBase)	+ pOldOptHeader->SizeOfImage, 0x10));
+	pFunc		= ReCa<BYTE*>(ALIGN_UP			(ReCa<UINT_PTR>(pArg)			+ sizeof(MANUAL_MAPPING_DATA), 0x10));
+
 	memset(pLocalBase, 0, pOldOptHeader->SizeOfImage);
 	memcpy(pLocalBase, pSrcData, 0x1000);
 	
@@ -343,7 +557,7 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 	if (LocationDelta)
 	{
 		if (!pOldOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size)
-			return NULL;
+			return INJ_ERR_IMAGE_CANT_RELOC;
 
 		auto * pRelocData = ReCa<IMAGE_BASE_RELOCATION*>(pLocalBase + pOldOptHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
 		while (pRelocData->VirtualAddress)
@@ -361,13 +575,14 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 		}
 	}
 
-	auto LoadFunctionPointer = [=](char * szLib, char * szFunc, void * &pOut)
+	auto LoadFunctionPointer = [=](const char * szLib, const char * szFunc, void * &pOut)
 	{
 		if (!GetImportA(hProc, szLib, szFunc, pOut))
 		{
 			delete[] pSrcData;
 			VirtualFree(pLocalBase, 0, MEM_RELEASE);
 			VirtualFreeEx(hProc, pTargetBase - ShiftOffset, 0, MEM_RELEASE);
+
 			return false;
 		}
 
@@ -398,38 +613,35 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 	data.pModuleBase		= pTargetBase;
 	data.Flags				= Flags;
 	
-	BOOL bRet = WriteProcessMemory(hProc, pArg, &data, sizeof(MANUAL_MAPPING_DATA), nullptr);
-	if (!bRet || !WriteProcessMemory(hProc, pTargetBase, pLocalBase, pOldOptHeader->SizeOfImage, nullptr))
+	BOOL bRet1 = WriteProcessMemory(hProc, pTargetBase, pLocalBase, pOldOptHeader->SizeOfImage, nullptr);
+	BOOL bRet2 = WriteProcessMemory(hProc, pArg, &data, sizeof(MANUAL_MAPPING_DATA), nullptr);
+	BOOL bRet3 = WriteProcessMemory(hProc, pFunc, ManualMapShell, ShellSize, nullptr);
+	if (!bRet1 || !bRet2 || !bRet3)
 	{
 		LastError = GetLastError();
+
 		delete[] pSrcData;
 		VirtualFree(pLocalBase, 0, MEM_RELEASE);
 		VirtualFreeEx(hProc, pAllocBase, 0, MEM_RELEASE);
+
 		return INJ_ERR_WPM_FAIL;
 	}
 
 	delete[] pSrcData;
 	VirtualFree(pLocalBase, 0, MEM_RELEASE);
 
-	ULONG_PTR FuncSize = 0x800;
-	void * pFunc = VirtualAllocEx(hProc, nullptr, FuncSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-	if (!pFunc)
+	DWORD dwRet = StartRoutine(hProc, pFunc, pArg, Method, (Flags & INJ_THREAD_CREATE_CLOAKED) != 0, CC_STDCALL, LastError, hOut);
+	
+	if (Method != LM_QueueUserAPC)
 	{
-		LastError = GetLastError();
-		return INJ_ERR_CANT_ALLOC_MEM;
+		auto zero_size		= pAllocBase + AllocSize - pArg;
+		BYTE * zero_bytes	= new BYTE[zero_size];
+		memset(zero_bytes, 0, zero_size);
+
+		WriteProcessMemory(hProc, pArg, zero_bytes, zero_size, nullptr);
+
+		delete[] zero_bytes;
 	}
-
-	if (!WriteProcessMemory(hProc, pFunc, ManualMapShell, FuncSize, nullptr))
-	{
-		LastError = GetLastError();
-		VirtualFreeEx(hProc, pFunc, 0, MEM_RELEASE);
-		return INJ_ERR_WPM_FAIL;
-	}
-
-	DWORD dwRet = StartRoutine(hProc, pFunc, pArg, Method, (Flags & INJ_HIDE_THREAD_FROM_DEBUGGER) != 0, CC_STDCALL, LastError, hOut);
-
-	if(Method != LM_QueueUserAPC)
-		VirtualFreeEx(hProc, pFunc, 0, MEM_RELEASE);
 
 	if (Flags & INJ_FAKE_HEADER)
 	{
@@ -440,13 +652,10 @@ DWORD ManualMap(const char * szDllFile, HANDLE hProc, LAUNCH_METHOD Method, DWOR
 	return dwRet;
 }
 
-DWORD Cloaking(HANDLE hProc, DWORD Flags, HINSTANCE hMod)
+DWORD Cloaking(HANDLE hProc, DWORD Flags, HINSTANCE hMod, DWORD & LastError)
 {
 	if (!Flags)
 		return INJ_ERR_SUCCESS;
-
-	if (Flags > INJ_MAX_FLAGS)
-		return INJ_ERR_INVALID_FLAGS;
 
 	if (Flags & INJ_ERASE_HEADER)
 	{
@@ -499,14 +708,14 @@ DWORD Cloaking(HANDLE hProc, DWORD Flags, HINSTANCE hMod)
 
 		PEB * ppeb = ProcInfo.GetPEB();
 
-		PEB	peb;
+		PEB	peb{ 0 };
 		if (!ReadProcessMemory(hProc, ppeb, &peb, sizeof(PEB), nullptr))
 		{
 			LastError = GetLastError();
 			return INJ_ERR_CANT_ACCESS_PEB;
 		}
 
-		PEB_LDR_DATA ldrdata;
+		PEB_LDR_DATA ldrdata{ 0 };
 		if (!ReadProcessMemory(hProc, peb.Ldr, &ldrdata, sizeof(PEB_LDR_DATA), nullptr))
 		{
 			LastError = GetLastError();
@@ -539,7 +748,7 @@ DWORD Cloaking(HANDLE hProc, DWORD Flags, HINSTANCE hMod)
 				Unlink(CurrentEntry.InMemoryOrder);
 				Unlink(CurrentEntry.InInitOrder);
 
-				BYTE Buffer[MAX_PATH * 2]{ 0 };
+				BYTE Buffer[MAX_PATH * 4]{ 0 };
 				WriteProcessMemory(hProc, CurrentEntry.BaseDllName.szBuffer, Buffer, CurrentEntry.BaseDllName.MaxLength, nullptr);
 				WriteProcessMemory(hProc, CurrentEntry.FullDllName.szBuffer, Buffer, CurrentEntry.FullDllName.MaxLength, nullptr);
 				WriteProcessMemory(hProc, pCurrentEntry, Buffer, sizeof(LDR_DATA_TABLE_ENTRY), nullptr);
@@ -561,15 +770,18 @@ DWORD Cloaking(HANDLE hProc, DWORD Flags, HINSTANCE hMod)
 
 HINSTANCE __stdcall LoadLibraryShell(LOAD_LIBRARY_DATA * pData)
 {
-	if (!pData || !pData->pLoadLibraryA)
+	if (!pData || !pData->pLoadLibraryExW)
 		return NULL;
 
-	HINSTANCE hDll = pData->pLoadLibraryA(pData->szDll);
-	pData->pLoadLibraryA = nullptr;
-	pData->hRet = hDll;
+	HINSTANCE hDll	= pData->pLoadLibraryExW(pData->szDll, nullptr, NULL);
+	pData->hRet		= hDll;
+
+	pData->pLoadLibraryExW = nullptr;
 
 	return pData->hRet;
 }
+
+DWORD LoadLibraryShell_End() { return 0; }
 
 HINSTANCE __stdcall LdrLoadDllShell(LDR_LOAD_DLL_DATA * pData)
 {
@@ -577,11 +789,14 @@ HINSTANCE __stdcall LdrLoadDllShell(LDR_LOAD_DLL_DATA * pData)
 		return NULL;
 
 	pData->pModuleFileName.szBuffer = ReCa<wchar_t*>(pData->Data);
-	pData->pLdrLoadDll(nullptr, 0, &pData->pModuleFileName, &pData->hRet);
+	pData->ntRet = pData->pLdrLoadDll(nullptr, 0, &pData->pModuleFileName, &pData->hRet);
+
 	pData->pLdrLoadDll = nullptr;
 
 	return ReCa<HINSTANCE>(pData->hRet);
 }
+
+DWORD LdrLoadDllShell_End() { return 1; }
 
 HINSTANCE __stdcall ManualMapShell(MANUAL_MAPPING_DATA * pData)
 {
@@ -593,7 +808,7 @@ HINSTANCE __stdcall ManualMapShell(MANUAL_MAPPING_DATA * pData)
 	auto _GetProcAddress	= pData->pGetProcAddress;
 	DWORD _Flags			= pData->Flags;
 	auto _DllMain			= ReCa<f_DLL_ENTRY_POINT>(pBase + pOp->AddressOfEntryPoint);
-
+	
 	if (pOp->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size)
 	{
 		auto * pImportDescr = ReCa<IMAGE_IMPORT_DESCRIPTOR*>(pBase + pOp->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
@@ -601,6 +816,7 @@ HINSTANCE __stdcall ManualMapShell(MANUAL_MAPPING_DATA * pData)
 		{
 			char * szMod = ReCa<char*>(pBase + pImportDescr->Name);
 			HINSTANCE hDll = pData->pLoadLibraryA(szMod);
+
 			ULONG_PTR * pThunkRef	= ReCa<ULONG_PTR*>(pBase + pImportDescr->OriginalFirstThunk);
 			ULONG_PTR * pFuncRef	= ReCa<ULONG_PTR*>(pBase + pImportDescr->FirstThunk);
 
@@ -615,6 +831,7 @@ HINSTANCE __stdcall ManualMapShell(MANUAL_MAPPING_DATA * pData)
 				if (IMAGE_SNAP_BY_ORDINAL(*pThunkRef))
 				{
 					*pFuncRef = _GetProcAddress(hDll, ReCa<char*>(*pThunkRef & 0xFFFF));
+
 					if (_Flags & INJ_CLEAN_DATA_DIR)
 						*ReCa<WORD*>(pThunkRef) = 0;
 				}
@@ -622,6 +839,7 @@ HINSTANCE __stdcall ManualMapShell(MANUAL_MAPPING_DATA * pData)
 				{
 					auto * pImport = ReCa<IMAGE_IMPORT_BY_NAME*>(pBase + (*pThunkRef));
 					*pFuncRef = _GetProcAddress(hDll, pImport->Name);
+
 					if (_Flags & INJ_CLEAN_DATA_DIR)
 						_ZeroMemory(ReCa<BYTE*>(pImport->Name), _strlenA(pImport->Name));
 				}
@@ -638,7 +856,7 @@ HINSTANCE __stdcall ManualMapShell(MANUAL_MAPPING_DATA * pData)
 		for (; pCallback && (*pCallback); ++pCallback)
 			(*pCallback)(pBase, DLL_PROCESS_ATTACH, nullptr);
 	}
-	
+		
 	_DllMain(pBase, DLL_PROCESS_ATTACH, nullptr);
 	
 	if (_Flags & INJ_CLEAN_DATA_DIR)
@@ -677,8 +895,9 @@ HINSTANCE __stdcall ManualMapShell(MANUAL_MAPPING_DATA * pData)
 		for (UINT i = 0; i != 0x1000; i += sizeof(ULONG64))
 			*ReCa<ULONG64*>(pBase + i) = 0;
 
-	pData->pLoadLibraryA	= nullptr;
-	pData->hRet				= ReCa<HINSTANCE>(pBase);
+	pData->hRet	= ReCa<HINSTANCE>(pBase);
 
 	return pData->hRet;
 }
+
+DWORD ManualMapShell_End() { return 2; }

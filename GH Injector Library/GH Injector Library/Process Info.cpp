@@ -1,8 +1,9 @@
 #include "Process Info.h"
 
+#pragma comment(lib, "Psapi.lib")
+
 #define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
 #define NEXT_SYSTEM_PROCESS_ENTRY(pCurrent) reinterpret_cast<SYSTEM_PROCESS_INFORMATION*>(reinterpret_cast<BYTE*>(pCurrent) + pCurrent->NextEntryOffset)
-
 
 ProcessInfo::ProcessInfo()
 {
@@ -161,7 +162,7 @@ PEB * ProcessInfo::GetPEB()
 	PROCESS_BASIC_INFORMATION PBI{ 0 };
 	ULONG size_out = 0;
 	NTSTATUS ntRet = m_pNtQueryInformationProcess(m_hCurrentProcess, ProcessBasicInformation, &PBI, sizeof(PROCESS_BASIC_INFORMATION), &size_out);
-
+	
 	if (NT_FAIL(ntRet))
 		return nullptr;
 	
@@ -171,6 +172,57 @@ PEB * ProcessInfo::GetPEB()
 DWORD ProcessInfo::GetPID()
 {
 	return GetProcessId(m_hCurrentProcess);
+}
+
+bool ProcessInfo::IsNative()
+{
+	BOOL bOut = FALSE;
+	IsWow64Process(m_hCurrentProcess, &bOut);
+	return (bOut == FALSE);
+}
+
+void * ProcessInfo::GetEntrypoint()
+{
+	if (!m_pFirstProcess)
+		return nullptr;
+
+	PEB * ppeb = GetPEB();
+	if (!ppeb)
+		return nullptr;
+
+	PEB	peb;
+	if (!ReadProcessMemory(m_hCurrentProcess, ppeb, &peb, sizeof(PEB), nullptr))
+		return nullptr;
+
+	PEB_LDR_DATA ldrdata;
+	if (!ReadProcessMemory(m_hCurrentProcess, peb.Ldr, &ldrdata, sizeof(PEB_LDR_DATA), nullptr))
+		return nullptr;
+
+	LIST_ENTRY * pCurrentEntry	= ldrdata.InLoadOrderModuleListHead.Flink;
+	LIST_ENTRY * pLastEntry		= ldrdata.InLoadOrderModuleListHead.Blink;
+	
+	wchar_t NameBuffer[MAX_PATH]{ 0 };
+	while (true)
+	{
+		LDR_DATA_TABLE_ENTRY CurrentEntry;
+		if (ReadProcessMemory(m_hCurrentProcess, pCurrentEntry, &CurrentEntry, sizeof(LDR_DATA_TABLE_ENTRY), nullptr))
+		{
+			if (ReadProcessMemory(m_hCurrentProcess, CurrentEntry.BaseDllName.szBuffer, NameBuffer, CurrentEntry.BaseDllName.Length, nullptr))
+			{
+				if (NameBuffer[CurrentEntry.BaseDllName.Length / 2 - 1] == 'e')
+				{
+					return CurrentEntry.EntryPoint;
+				}
+			}
+		}
+
+		if (pCurrentEntry == pLastEntry)
+			break;
+		else
+			pCurrentEntry = CurrentEntry.InLoadOrder.Flink;
+	}
+
+	return nullptr;
 }
 
 DWORD ProcessInfo::GetTID()

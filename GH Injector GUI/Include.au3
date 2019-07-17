@@ -20,9 +20,12 @@
 
 #Region Global Definitions
 
-Global Const 	$g_CurrentVersion 	= "2.5"
-Global 			$g_NewestVersion 	= "2.5"
-Global Const 	$g_ConfigPath 		= @ScriptDir & "\GH Injector Config.ini"
+Global Const 	$g_CurrentVersion 		= "3.0"
+Global 			$g_NewestVersion 		= "3.0"
+Global Const 	$g_ConfigPath 			= @ScriptDir & "\GH Injector Config.ini"
+Global Const 	$g_LogPath				= @ScriptDir & "\GH_Inj_Log.txt"
+Global			$g_RunNative			= True
+Global			$g_InjectionDll_Name	= ""
 
 Global $g_Processname 			= "Broihon.exe"
 Global $g_PID					= 0
@@ -38,14 +41,22 @@ Global $g_IgnoreUpdates			= False
 Global $g_ProcNameFilter		= ""
 Global $g_ToolTipsOn			= True
 
-Global Const $INJ_ERASE_HEADER				= 0x0001
-Global Const $INJ_FAKE_HEADER				= 0x0002
-Global Const $INJ_UNLINK_FROM_PEB			= 0x0004
-Global Const $INJ_SHIFT_MODULE				= 0x0008
-Global Const $INJ_CLEAN_DATA_DIR			= 0x0010
-Global Const $INJ_HIDE_THREAD_FROM_DEBUGGER	= 0x0020
-Global Const $INJ_SCRAMBLE_DLL_NAME 		= 0x0040
-Global Const $INJ_LOAD_DLL_COPY 			= 0x0080
-Global Const $INJ_HIJACK_HANDLE				= 0x0100
+Global Const $INJ_ERASE_HEADER			= 0x0001
+Global Const $INJ_FAKE_HEADER			= 0x0002
+Global Const $INJ_UNLINK_FROM_PEB		= 0x0004
+Global Const $INJ_SHIFT_MODULE			= 0x0008
+Global Const $INJ_CLEAN_DATA_DIR		= 0x0010
+Global Const $INJ_THREAD_CREATE_CLOAKED	= 0x0020
+Global Const $INJ_SCRAMBLE_DLL_NAME 	= 0x0040
+Global Const $INJ_LOAD_DLL_COPY 		= 0x0080
+Global Const $INJ_HIJACK_HANDLE			= 0x0100
+
+
+Global Const $GUI_EXIT  	= 0
+Global Const $GUI_RETURN 	= 1
+Global Const $GUI_RESET 	= 2
+Global Const $GUI_INJECT	= 3
+Global Const $GUI_UPDATE	= 4
+Global Const $GUI_CLOSE		= 5
 
 #EndRegion

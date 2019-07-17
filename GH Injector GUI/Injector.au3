@@ -1,0 +1,105 @@
+#NoTrayIcon
+#Region ;**** Directives created by AutoIt3Wrapper_GUI ****
+#AutoIt3Wrapper_Icon=GH Icon.ico
+#AutoIt3Wrapper_Outfile=GH Injector - x86.exe
+#AutoIt3Wrapper_Outfile_x64=GH Injector - x64.exe
+#AutoIt3Wrapper_UseUpx=y
+#AutoIt3Wrapper_Compile_Both=y
+#AutoIt3Wrapper_UseX64=y
+#EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
+#RequireAdmin
+
+;FUNCTION LIST IN FILE ORDER:
+
+;===================================================================================================
+; Function........:  Main()
+;
+; Description.....:  Main function of the injector GUI.
+;===================================================================================================
+
+#include "Update.au3"
+#include "Injection.au3"
+
+Func Main()
+
+	$g_InjectionDll_Name = "GH Injector - "
+	$OsArch = @OSArch
+	If ($OsArch = "X64" AND NOT @AutoItX64) Then
+		$g_RunNative = False
+		$g_InjectionDll_Name = $g_InjectionDll_Name & "x86.dll"
+
+		$mb_ret = MsgBox(BitOR($MB_ICONWARNING, $MB_YESNO), "Warning", "Since you're using a 64-bit version of Windows it's recommended to use the 64-bit version of the injector." & @CRLF & "Do you want to switch to the 64-bit version?")
+		If ($mb_ret = $IDYES) Then
+			If (NOT FileExists("GH Injector - x64.exe")) Then
+				MsgBox($MB_ICONERROR, "Error", '"GH Injector - x64.exe" is missing.')
+				Exit
+			EndIf
+			ShellExecute("GH Injector - x64.exe")
+			Exit
+		EndIf
+	Else
+		$g_InjectionDll_Name = "GH Injector - " & StringLower($OsArch) & ".dll"
+	EndIf
+
+	If (NOT FileExists($g_InjectionDll_Name)) Then
+
+		MsgBox($MB_ICONERROR, "Error", $g_InjectionDll_Name & " is missing.")
+		Exit
+
+	EndIf
+
+	$hInjectionDll = DllOpen($g_InjectionDll_Name)
+	If ($hInjectionDll = -1) Then
+
+		MsgBox($MB_ICONERROR, "Error", "Can't load " & $g_InjectionDll_Name & "." & @CRLF & "Errorcode: " & @error)
+		Exit
+
+	EndIf
+
+	SetPrivilege($SE_DEBUG_NAME, True)
+
+	LoadSettings()
+
+	If NOT($g_IgnoreUpdates) Then
+		Update()
+	EndIf
+
+	$hGUI = CreateGUI()
+
+	LoadFiles($h_L_Dlls)
+
+	$GUI_MSG = $GUI_RETURN
+	While ($GUI_MSG <> $GUI_EXIT)
+		$GUI_MSG = UpdateGUI()
+
+		If ($GUI_MSG = $GUI_RESET) Then
+			ResetSettings()
+			ResetGUI()
+			$GUI_MSG = UpdateGUI()
+
+		ElseIf ($GUI_MSG = $GUI_INJECT OR $g_AutoInjection) Then
+			$injection_state = PreInject($hGUI)
+			If ($injection_state = True) Then
+				If (Inject() = $GUI_CLOSE) Then
+					ExitLoop
+				EndIf
+			EndIf
+
+		ElseIf ($GUI_MSG = $GUI_UPDATE) Then
+			Update()
+		EndIf
+
+		Sleep(10)
+	WEnd
+
+	SaveFiles($h_L_Dlls)
+
+	SaveSettings()
+
+	CloseGUI()
+
+	Exit
+
+EndFunc   ;==>Main
+
+Main()

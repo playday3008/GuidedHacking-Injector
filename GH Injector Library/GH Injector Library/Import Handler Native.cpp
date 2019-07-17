@@ -1,8 +1,19 @@
 #include "Import Handler.h"
 
-BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc);
+#ifdef UNICODE
+#undef Module32First
+#undef Module32Next
+#undef MODULEENTRY32
+#endif
 
-bool GetImportA(HANDLE hProc, char * szDll, char * szFunc, void * &pOut)
+BYTE * GetProcAddressA(HINSTANCE hDll, const char * szFunc);
+
+bool GetImportA(HANDLE hProc, const char * szDll, const char * szFunc, void * &pOut)
+{
+	return GetImportA(GetModuleHandleExA(hProc, szDll), szDll, szFunc, pOut);
+}
+
+bool GetImportA(HINSTANCE hDllEx, const char * szDll, const char * szFunc, void *& pOut)
 {
 	HINSTANCE hDll = LoadLibraryA(szDll);
 	if (!hDll)
@@ -12,30 +23,45 @@ bool GetImportA(HANDLE hProc, char * szDll, char * szFunc, void * &pOut)
 	if (!pFunc)
 		return false;
 	
-	MODULEENTRY32 ME32{ 0 };
-	ME32.dwSize = sizeof(ME32);
-
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetProcessId(hProc));
-	BOOL bRet = Module32First(hSnap, &ME32);
-	while (bRet)
-	{
-		if (!_stricmp(ME32.szModule, szDll))
-			break;
-
-		bRet = Module32Next(hSnap, &ME32);
-	}
-	CloseHandle(hSnap);
-
-	if (!bRet)
-		return false;
-
-	auto delta = reinterpret_cast<BYTE*>(ME32.hModule) - reinterpret_cast<BYTE*>(hDll);
+	auto delta = reinterpret_cast<BYTE*>(hDllEx) - reinterpret_cast<BYTE*>(hDll);
 	pOut = pFunc + delta;
 	
 	return true;
 }
 
-BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc)
+HINSTANCE GetModuleHandleExA(HANDLE hProc, const char * szDll)
+{
+	MODULEENTRY32 ME32{ 0 };
+	ME32.dwSize = sizeof(ME32);
+	
+	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetProcessId(hProc));
+	if (hSnap == INVALID_HANDLE_VALUE)
+	{
+		while (GetLastError() == ERROR_BAD_LENGTH)
+		{
+			hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetProcessId(hProc));
+		
+			if (hSnap != INVALID_HANDLE_VALUE)
+				break;
+		}
+	}
+		
+	BOOL bRet = Module32First(hSnap, &ME32);
+	while (bRet)
+	{
+		if (!_stricmp(ME32.szModule, szDll))
+			break;
+		bRet = Module32Next(hSnap, &ME32);
+	}
+	CloseHandle(hSnap);
+
+	if (!bRet)
+		return NULL;
+
+	return ME32.hModule;
+}
+
+BYTE * GetProcAddressA(HINSTANCE hDll, const char * szFunc)
 {
 	if (!hDll)
 		return nullptr;
@@ -70,7 +96,7 @@ BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc)
 				pFuncName = reinterpret_cast<char*>(LOWORD(atoi(++pFuncName)));
 
 			HINSTANCE hLib = LoadLibraryA(pFullExport);
-			if (hLib == reinterpret_cast<HINSTANCE>(hDll) && !strcmp(pFuncName, szFunc))
+			if (hLib == reinterpret_cast<HINSTANCE>(hDll) && !_stricmp(pFuncName, szFunc))
 			{
 				return nullptr;
 			}
@@ -121,7 +147,7 @@ BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc)
 			pFuncName = reinterpret_cast<char*>(LOWORD(atoi(++pFuncName)));
 
 		HINSTANCE hLib = LoadLibraryA(pFullExport);
-		if (hLib == reinterpret_cast<HINSTANCE>(hDll) && !strcmp(pFuncName, szFunc))
+		if (hLib == reinterpret_cast<HINSTANCE>(hDll) && !_stricmp(pFuncName, szFunc))
 		{
 			return nullptr;
 		}

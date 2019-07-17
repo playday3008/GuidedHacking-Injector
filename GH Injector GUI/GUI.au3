@@ -4,6 +4,8 @@
 ; Function........:  CreateGUI()
 ;
 ; Description.....:  Creates the main GUI.
+;
+; Return Value(s).:  Handle to the created GUI.
 ;===================================================================================================
 ; Function........:  CreateGroupBox($Title, $TextWidth, $TextHeight, $TextColour,
 ;						$TextStyle, $x, $y, $w, $h, $BorderColour)
@@ -111,7 +113,7 @@
 ;
 ; Description.....:  Closes the GUI(s) and does some clean up.
 ;===================================================================================================
-; Function........:  CheckBanner()
+; Function........:  UpdateCursor()
 ;
 ; Description.....:  Handles cursor change, tooltip and clicks to the GH Banner.
 ;===================================================================================================
@@ -128,7 +130,7 @@
 ; Description.....:  Opens a file dialog at the specified path or g_LastDirectory. Files selected
 ;						in the dialog will be added to the list (if valid).
 ;
-; Parameter(s)....:  $Path 		- Path to the directory. If empty $g_LastDirectory will be used.
+; Parameter(s)....:  $Path - Path to the directory. If empty $g_LastDirectory will be used.
 ;===================================================================================================
 ; Function........:  UpdateProcessIcon($TargetPID)
 ;
@@ -142,6 +144,17 @@
 ; Description.....:  Updates the global variables according to the current GUI settings (eg. after
 ; 						the ProcessPicker was used).
 ;===================================================================================================
+; Function........:  SearchProcessList($List, $PID, $Name, $bRetName)
+;
+; Description.....:  Loops through the process list to find the specified process (id).
+;
+; Parameter(s)....:  $List 		- A process list created by ListProcess().
+;                    $PID		- A process identifier to find.
+;                    $Name		- A process name to find. Only searched for it $PID is 0.
+;					 $bRetName	- If true returns the process name and otherwise the $PID.
+;
+; Return Value(s).:	 Depends on the $bRetName argument. If the process doesn't exist it returns 0.
+;===================================================================================================
 ; Function........:  UpdateGUI()
 ;
 ; Description.....:  Main GUI function which handles all events and updates the GUI accordingly.
@@ -153,23 +166,17 @@
 ;					 $GUI_RESET		- GUI gets reseted.
 ;===================================================================================================
 
-
 #include "ProcessList.au3"
 #include "Settings.au3"
 
 #Region Global Definitions
-
-Global Const $GUI_EXIT  	= 0
-Global Const $GUI_RETURN 	= 1
-Global Const $GUI_RESET 	= 2
-Global Const $GUI_INJECT	= 3
-Global Const $GUI_UPDATE	= 4
 
 Global Const $VK_DELETE = 0x2E
 
 $h_GUI 				= 0
 
 $h_P_Banner 		= 0
+
 ;Settings
 $h_L_ProcName 		= 0
 $h_I_ProcName 		= 0
@@ -184,13 +191,15 @@ $h_G_InjDelay 		= 0
 $h_I_InjDelay 		= 0
 $h_C_CloseAI 		= 0
 $h_C_AutoI 			= 0
+
 ;;Injection method
 $h_C_Method			= 0
 $h_C_HijackHandle	= 0
 	$h_L_HijackHandle 	= 0
 $h_C_LaunchMethod	= 0
-$h_C_HTFD			= 0
-	$h_L_HTFD			= 0
+$h_C_CloakThread	= 0
+	$h_L_CloakThread	= 0
+
 ;;Cloaking
 $h_C_Header 		= 0
 $h_C_Shift			= 0
@@ -201,6 +210,7 @@ $h_C_Clean			= 0
 	$h_L_Clean			= 0
 $h_C_RandomizeName  = 0
 $h_C_LoadCopy		= 0
+
 ;Settings
 $h_B_Reset 			= 0
 
@@ -222,7 +232,7 @@ $l_GUIWidth 	= 800
 $l_GUIHeight	= 440
 $l_BannerHeight = 66
 
-$l_WindowTitle 	= "Guided Hacking - Injector V" & $g_CurrentVersion
+$l_WindowTitle 	= "GH Injector V" & $g_CurrentVersion
 
 $l_bBanner = Binary( _
 		"0xFFD8FFE000104A46494600010101004800480000FFFE00134372656174656420776974682047494D50FFDB0043000302020302020303030304030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B1016101113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414FFC20011080042032003011100021101031101FFC4001B00010002030101000000000000000000000004050103060207FFC40014010100000000000000000000000000000000FFDA000C03010002100310000001F8A1AC03D1B0D200000000320C000C806019060000000006C358001ECB12B8F00000006C35800000C962443400003D1B0D20006D3C9E00064C000C9836035992C4D46A241E4825815E002C0AF271E8C007A2B8DA5911C1A0D05C9101E8846B3A639900E88A43403E8871A568075C6A2ACB33D1CB9D21CC82D4B63943A6324D38B001D31CC9D1128A92713CE48D20C9626A351BCD644251B8D07A3710CD47A2E0A500986D2B8D80D65915A0024182515C002C4AE27820007A27110DA4500C930840164569D39CC00748511A09C59134E481D59CE11C03264E94E60E84C9CE83A83C1089673801D3908C14C0193A739705915A0006D24108005895C4D3615C013C100D80F04E2000002C4AE001625713C100004F229B88A0C19261080369B4ECCA400BF385341D69C91D39CF1A4EACE50000F474A4C288A900EA0F050170682A01D39B0E500000324D2080013C800006D369B48649219E8967A201B01E496420483683C1BCAE001625713C100004E23160470683513084019261D01CD807447366B3E9273664B03863A93960003D1F513903073801D41E0A0349D5140443A73D9CA8379D00361CB992410C0009E4000004E32402C0AF279009E4036035960578001620AE001625713C100004F229B48A01926108026118E90E6003A4288E90E5CF00EB4E48EB8E44000F474A7305C134E681D41E0A03483B438D3A5369CA18001D69C9982C4AE00026914F000261189840269149A57928D4601AC960880164403D1B8880C9605713C1000271A4F06D228064984204837104E9CE6003A4288E98E480249765716A72E017C519D29CC02D4B33973A83C1406907B3AF221CE1D91C51805C924E7412CC114025114B42B4F20DC482192C840B72011C13C880D60906F30648479048379804106F3D1B819221A8F4589AC1A0D0599A81A88A0B42AC02C8D26484002D8A92717C793D140432CCAB00B423124C15E78009A5A1CF1B0EA4D67A2B0A725822120DE60F4413C82798326B221B8D67905895C0120D60D60000000000000000000000000000000000000000000000000000000000000000000000000D87FFC4002F100001030203060603010101010000000003010204000510203306111213143422232431323515162130254060FFDA000801010001050226A628D57572489FEBBB3EEADDFF0085A373F3318E22FE2A6EE7B1C35FF1631C477F87BD32DB2C8850100B99AD575724899904F75398E665F6CBED80F509A9489BD78071A9D30AB4920A95D62BE8A04E0A849BDD9009E96A5FCE0AF09BAF915D71EBAB575721864A16A489A769FAF915D7C8A2C821A93DE54C332475F22BAD25272645106E13AAEC9BA163B3A9BEF86D6C2CF20765837186B6F9B88EDD1EDC126D14ADDF959BC4CDA294A87811A681BEFB489BAF385BEDA5B91664F8F163D5CD375B7665786FF75032E43C97F4DD26A05ADA50BAFBD353EEF388A1DA29E2468A15EE8C17C72E088AE5E11C5A74C2AD2482A5756AFA28511B410736BA868A96495D4D9666D710A45106E13A9A9C4EB8EE22E31588E34F5E39143D426A50FD303200CA0799188485F2C80ED6A67CE1EA62D72B54FB8A316ACAEE714F79BDDE2C5EA45576EC71D9CFBD3EB5428AE9D2EF929B2674EFFA168C2CE21C60C8904946C8DF96D2FDD55BED5D48EE175E78B0BA7D66CD7DEC69C4B74FBAC11B1B8ED0773698293E65D2E2B703E49930573B760CF4C0CA21A9492488AB907EA4550D3D4C75E6E44F2A21BC51E87A84D4A9ABE76685F2C80ED6A67CE1EA648BE2A16A4AEE7756EC13DE6F77889FCB24967048996A993ADBFAEDCEBF5DB9D7EBB73AB0D8AE00BC1F5AAD9E82DD5612B564184E016AEDE45BF2B7E5B4BF7516CC9121DC2E45B8931BA7D66CD7DE9B5AD570488EB9DBD6DE7C3683B98DE9B67B3A26F598BE7E58DE06651BF96492CE0911FC2363D46F94C469A9ADE274B779ACF143A1EA1351BFC74DEEB0185489D23ABA4751233C6C85F2C80ED6A67CE1EA6487AC2D4932CC923AC357586A215E5A4F79BDDE499DCDD0AF640EA4B5D496BA92D6CE9C8B7C3EB318A47DE2CB2387F5C9749B3D311769E1BDAEABF7F572B7E57B5896AB9C7BEC86CAB8DB1A21E374FACD9AFBD36B55B250E482545242915B41DCAF8B66300056417F5E915FAF48A66CD4B2BDCD56398BB9F33BACA2ED734D5DF27E30AB562544F0AD44FEAD0F509A9523CC1E591E5060EA640FF21D4CF9C3D4C8CF2A30B5257738A7BCDEEF18ACE22BDDC6FBB7638ECE7DE9F5AC2C40BDEF523F0B3FAD8B4A9F91B0656FCB697EEAADB727DB8B71B68D0585D3EB366BEF4DAD84754BF447355ABB41DCD93D585515AB92C4DE953DF093E6332C572731EC51BF24567115EEE37C9F08EA23910AE6AB1C5F2A35457F0482B78083D426A500DCBA34751641B123239CAF7088A22481703B044E2591E50AA67CE1EA6228FE13179AE16ACAEE714F79BDDE0103CEA5235ACABB7638" & _
@@ -249,6 +259,7 @@ $g_ExePath				= "No process selected."
 
 Global $DropFileBuffer 			= 0
 Global $g_DllList_SortSense[5] 	= [False, False, False, False, False]
+Global $g_ProcessList			= 0
 $l_IgnoreInputChange 			= False
 $l_ChangedFont					= False
 $l_ProcIconIndex				= 0
@@ -256,6 +267,9 @@ $l_DoubleClickedDll				= -1
 $l_UpdateProcess				= True
 $l_ProcessDead					= False
 $l_ProcessPickerActive			= False
+$l_TargetProcessArchitecture	= 0
+$l_UpdateByTickCount 			= True
+$last_tick 						= 0
 
 $h_GUI_LV_SubclassProc 	= 0
 $ph_GUI_LV_SubclassProc = 0
@@ -290,6 +304,16 @@ Func CreateGUI()
 
 	FileDelete($l_IconPath)
 	FileWrite($l_IconPath, $l_bLulIcon)
+
+	If (@AutoItX64) Then
+
+		$l_WindowTitle &= " (64-bit)"
+
+	Else
+
+		$l_WindowTitle &= " (32-bit)"
+
+	EndIf
 
 	$h_GUI = GUICreate($l_WindowTitle, $l_GUIWidth, $l_GUIHeight, 100, 100, Default, $WS_EX_ACCEPTFILES)
 	If IsAdmin() Then
@@ -340,29 +364,35 @@ Func CreateGUI()
 		CreateGroupBox(" Injection method ", 100, 19, 0, $FW_BOLD, 15, 215, $l_GUIWidth / 3 - 25, 70, 0xB0B0B0)
 
 			GUIStartGroup()
-				$h_C_Method		= GUICtrlCreateCombo("", 20, 230, 121, -1, $CBS_DROPDOWNLIST)
-					GUICtrlSetData($h_C_Method, "LoadLibraryA|LdrLodDll|ManualMap", "LoadLibraryA")
+				$h_C_Method	= GUICtrlCreateCombo("", 20, 230, 121, -1, $CBS_DROPDOWNLIST)
+					GUICtrlSetData($h_C_Method, "LoadLibraryExW|LdrLodDll|ManualMap", "LoadLibraryExW")
 					_GUICtrlComboBox_SetCurSel($h_C_Method, $g_InjectionMethod)
 
-				$h_L_HijackHandle = GUICtrlCreateLabel("", 144, 230, 110, 20)
-				$h_C_HijackHandle = GUICtrlCreateCheckbox("Hijack handle", 144, 230, 110, 20)
+					$h_L_HijackHandle = GUICtrlCreateLabel("", 150, 230, 100, 20)
+						GUICtrlSetState($h_L_HijackHandle, $GUI_DISABLE)
+				$h_C_HijackHandle = GUICtrlCreateCheckbox("Hijack handle", 150, 230, 100, 20)
+				If (NOT $g_RunNative) Then
 					GUICtrlSetState($h_C_HijackHandle, $GUI_DISABLE)
-				;If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
-					;GUICtrlSetState($h_C_HijackHandle, $GUI_CHECKED)
-				;EndIf
+					GUICtrlSetState($h_L_HijackHandle, $GUI_ENABLE)
+					If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+						$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_HIJACK_HANDLE)
+					EndIf
+				ElseIf (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+					GUICtrlSetState($h_C_HijackHandle, $GUI_CHECKED)
+				EndIf
 
 				$h_C_LaunchMethod = GUICtrlCreateCombo("", 20, 255, 121, -1, $CBS_DROPDOWNLIST)
 					GUICtrlSetData($h_C_LaunchMethod, "NtCreateThreadEx|Thread Hijacking|SetWindowsHookEx|QueueUserAPC", "NtCreateThreadEx")
 					_GUICtrlComboBox_SetCurSel($h_C_LaunchMethod, $g_LaunchMethod)
 
-					$h_L_HTFD = GUICtrlCreateLabel("", 144, 255, 110, 20)
-						GUICtrlSetState($h_L_HTFD, $GUI_DISABLE)
-				$h_C_HTFD = GUICtrlCreateCheckbox("Hide from debugger", 144, 255, 110, 20)
+					$h_L_CloakThread = GUICtrlCreateLabel("", 150, 255, 100, 20)
+						GUICtrlSetState($h_L_CloakThread, $GUI_DISABLE)
+				$h_C_CloakThread = GUICtrlCreateCheckbox("Cloak thread", 150, 255, 100, 20)
 				If ($g_LaunchMethod <> 0) Then
-					GUICtrlSetState($h_C_HTFD, $GUI_DISABLE)
-					GUICtrlSetState($h_L_HTFD, $GUI_ENABLE)
-				ElseIf (BitAND($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)) Then
-					GUICtrlSetState($h_C_HTFD, $GUI_CHECKED)
+					GUICtrlSetState($h_C_CloakThread, $GUI_DISABLE)
+					GUICtrlSetState($h_L_CloakThread, $GUI_ENABLE)
+				ElseIf (BitAND($g_InjectionFlags, $INJ_THREAD_CREATE_CLOAKED)) Then
+					GUICtrlSetState($h_C_CloakThread, $GUI_CHECKED)
 				EndIf
 
 		CreateGroupBox(" Cloaking ", 54, 19, 0, $FW_BOLD, 15, 295, $l_GUIWidth / 3 - 25, 95, 0xB0B0B0)
@@ -421,7 +451,7 @@ Func CreateGUI()
 
 	CreateGroupBox(" Files ", 44, 25, 0, $FW_BOLD, $l_GUIWidth / 3 + 5, 80, 2 * $l_GUIWidth / 3 - 15, $l_GUIHeight - 145, 0xB0B0B0)
 
-        $h_L_Dlls = GUICtrlCreateListView("|Filename|Path|Architecture|foo", $l_GUIWidth / 3 + 10, 95, 2 * $l_GUIWidth / 3 - 25, $l_GUIHeight - 200, $LVS_REPORT, BitOR($LVS_EX_FULLROWSELECT, $LVS_EX_CHECKBOXES, $LVS_EX_GRIDLINES))
+        $h_L_Dlls = GUICtrlCreateListView("|Filename|Path|Architecture|fuckadasd", $l_GUIWidth / 3 + 10, 95, 2 * $l_GUIWidth / 3 - 25, $l_GUIHeight - 200, $LVS_REPORT, BitOR($LVS_EX_FULLROWSELECT, $LVS_EX_CHECKBOXES, $LVS_EX_GRIDLINES))
 		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 0, 18)
 		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 1, 120)
 		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 2, 2 * $l_GUIWidth / 3 - 280)
@@ -453,7 +483,7 @@ Func CreateGUI()
 	GUIRegisterMsg($WM_DROPFILES, 	"WM_DROPFILES")
 	GUIRegisterMsg($WM_COMMAND, 	"WM_COMMAND")
 
-    $h_GUI_LV_SubclassProc 	= DllCallbackRegister("GUI_LV_SubclassProc", 'lresult', 'hwnd;uint;wparam;lparam;uint_ptr;dword_ptr')
+    $h_GUI_LV_SubclassProc 	= DllCallbackRegister("GUI_LV_SubclassProc", 'LRESULT', 'HWND;UINT;WPARAM;LPARAM;UINT_PTR;DWORD_PTR')
 	$ph_GUI_LV_SubclassProc = DllCallbackGetPtr($h_GUI_LV_SubclassProc)
 	_WinAPI_SetWindowSubclass(GUICtrlGetHandle($h_L_Dlls), $ph_GUI_LV_SubclassProc, 1, 0)
 
@@ -466,23 +496,26 @@ Func CreateGUI()
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select the target process by it's executable name (not unique).", GUICtrlGetHandle($h_R_ProcName))
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select the target process by it's identifier (unique but changes when the process restarts).", GUICtrlGetHandle($h_L_PID))
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select the target process by it's identifier (unique but changes when the process restarts).", GUICtrlGetHandle($h_R_PID))
-	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select a process using the ProcessPicker.", GUICtrlGetHandle($h_B_SelProcess))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select a process using the ProcessPicker™.", GUICtrlGetHandle($h_B_SelProcess))
 
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Delays the injection (in ms).", GUICtrlGetHandle($h_G_InjDelay))
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "The injector automatically closes after injecting the checkmarked dll(s).", GUICtrlGetHandle($h_C_CloseAI))
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "If the injector finds the target process, it automatically injects the checkmarked dll(s).", GUICtrlGetHandle($h_C_AutoI))
 
-	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "LoadLibraryA is the default injection method which simply uses LoadLibraryA." & @CRLF & _
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "LoadLibraryExW is the default injection method which simply uses LoadLibraryExW." & @CRLF & _
 		"LdrLoadDll is an advanced injection method which uses LdrLoadDll and bypasses LoadLibrary(Ex) hooks." & @CRLF & _
 		"ManualMap is an advanced injection technique which bypasses most module detection methods.", GUICtrlGetHandle($h_C_Method))
-	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Rake is love, Rake is life, Mambda is ogre.", GUICtrlGetHandle($h_L_HijackHandle));dummy label
-	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Rake is love, Rake is life, Mambda is ogre.", GUICtrlGetHandle($h_C_HijackHandle))
+	If (NOT $g_RunNative) Then
+		_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Hijacks a handle from another process. To use this method please run the 64-bit version of the injector.", GUICtrlGetHandle($h_L_HijackHandle));dummy label
+	Else
+		_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Hijacks a handle from another.", GUICtrlGetHandle($h_C_HijackHandle))
+	EndIf
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "NtCreateThreadEx: Creates a simple remote thread to load the dll(s)." & @CRLF & _
 		"Thread hijacking: Redirects a thread to a codecave to load the dll(s)." & @CRLF & _
 		"SetWindowsHookEx: Adds a hook into the window callback list which then loads the dll(s)." & @CRLF & _
 		"QueueUserAPC: Registers an asynchronous procedure call to the process' threads which then loads the dll(s).", GUICtrlGetHandle($h_C_LaunchMethod))
-	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Adds a flag to NtCreateThreadEx which hides the thread from debuggers.", GUICtrlGetHandle($h_L_HTFD));dummy label
-	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Adds a flag to NtCreateThreadEx which hides the thread from debuggers.", GUICtrlGetHandle($h_C_HTFD))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Adds flags to NtCreateThreadEx which cloaks the thread from debuggers and makes it less suspicious.", GUICtrlGetHandle($h_L_CloakThread));dummy label
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Adds flags to NtCreateThreadEx which cloaks the thread from debuggers and makes it less suspicious.", GUICtrlGetHandle($h_C_CloakThread))
 
 	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Keep PEH: Doesn't modify the PE header of the dll(s)." & @CRLF & _
 		"Erase PEH: Erases the PE header by wrting 0's to it to avoid detections." & @CRLF & _
@@ -524,6 +557,8 @@ Func CreateGUI()
 	   _GUIImageList_AddIcon($h_P_ProcIcon, @SystemDir & "\imageres.dll", 11, True)
 	   _GUIImageList_Add($h_P_ProcIcon, _WinAPI_CreateSolidBitmap($h_GUI, _WinAPI_GetSysColor($COLOR_MENU), 20, 20))
 	   _GUIImageList_AddIcon($h_P_ProcIcon, $l_IconPath, 0, True)
+
+	Return $h_GUI
 
 EndFunc   ;==>CreateGUI
 
@@ -603,94 +638,94 @@ Func DllList_PopUp($hwnd)
 
 EndFunc   ;==>DllList_PopUp
 
-Func UpdateLV($hListView, $ActionID, $Mode = $M_All, $Index = -1)
+Func UpdateLV($hListView, $ActionID, $Mode = $M_All, $Index = -1, $Arch = "x64")
 
-   $Count 		= _GUICtrlListView_GetItemCount($hListView)
-   $SelIndices 	= _GUICtrlListView_GetSelectedIndices($hListView, True)
+	$Count 		= _GUICtrlListView_GetItemCount($hListView)
+	$SelIndices = _GUICtrlListView_GetSelectedIndices($hListView, True)
 
-   Switch $ActionID
-	  Case $A_ID_Toggle
-		 If ($Mode = $M_Index) Then
-			$checked = _GUICtrlListView_GetItemChecked($hListView, $Index)
-			If ($checked = True) Then
-			  _GUICtrlListView_SetItemChecked($hListView, $Index, False)
-			Else
-			  _GUICtrlListView_SetItemChecked($hListView, $Index, True)
+	Switch $ActionID
+		Case $A_ID_Toggle
+			If ($Mode = $M_Index) Then
+				$checked = _GUICtrlListView_GetItemChecked($hListView, $Index)
+				If ($checked = True) Then
+					_GUICtrlListView_SetItemChecked($hListView, $Index, False)
+				Else
+					_GUICtrlListView_SetItemChecked($hListView, $Index, True)
+				EndIf
+			ElseIf ($Mode = $M_Selected AND UBound($SelIndices)) Then
+				For $i = 1 To $SelIndices[0] Step 1
+					$checked = _GUICtrlListView_GetItemChecked($hListView, $SelIndices[$i])
+					If ($checked = True) Then
+						_GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], False)
+					Else
+						_GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], True)
+					EndIf
+				Next
+			ElseIf ($Mode = $M_All) Then
+				For $i = 0 To $Count - 1 Step 1
+					$checked = _GUICtrlListView_GetItemChecked($hListView, $i)
+					If ($checked = True) Then
+						_GUICtrlListView_SetItemChecked($hListView, $i, False)
+					Else
+						_GUICtrlListView_SetItemChecked($hListView, $i, True)
+					EndIf
+				Next
 			EndIf
-		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices)) Then
-			For $i = 1 To $SelIndices[0] Step 1
-			   $checked = _GUICtrlListView_GetItemChecked($hListView, $SelIndices[$i])
-			   If ($checked = True) Then
-				  _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], False)
-			   Else
-				  _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], True)
-			   EndIf
-			Next
-		 ElseIf ($Mode = $M_All) Then
-			For $i = 0 To $Count - 1 Step 1
-			   $checked = _GUICtrlListView_GetItemChecked($hListView, $i)
-			   If ($checked = True) Then
-				  _GUICtrlListView_SetItemChecked($hListView, $i, False)
-			   Else
-				  _GUICtrlListView_SetItemChecked($hListView, $i, True)
-			   EndIf
-			Next
-		 EndIf
 
-	  Case $A_ID_Activate
-		 If ($Mode = $M_Index) Then
-			_GUICtrlListView_SetItemChecked($hListView, $Index, True)
-		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
-			For $i = 1 To $SelIndices[0] Step 1
-			   _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], True)
-			Next
-		 ElseIf ($Mode = $M_All) Then
-			For $i = 0 To $Count - 1 Step 1
-			   _GUICtrlListView_SetItemChecked($hListView, $i, True)
-			Next
-		 EndIf
+		Case $A_ID_Activate
+			If ($Mode = $M_Index) Then
+				_GUICtrlListView_SetItemChecked($hListView, $Index, True)
+			ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+				For $i = 1 To $SelIndices[0] Step 1
+					_GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], True)
+				Next
+			ElseIf ($Mode = $M_All) Then
+				For $i = 0 To $Count - 1 Step 1
+				_GUICtrlListView_SetItemChecked($hListView, $i, True)
+				Next
+			EndIf
 
-	  Case $A_ID_Deactivate
-		 If ($Mode = $M_Index) Then
-			_GUICtrlListView_SetItemChecked($hListView, $Index, False)
-		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
-			For $i = 1 To $SelIndices[0] Step 1
-			   _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], False)
-			Next
-		 ElseIf ($Mode = $M_All) Then
-			For $i = 0 To $Count - 1 Step 1
-			   _GUICtrlListView_SetItemChecked($hListView, $i, False)
-			Next
-		 EndIf
+		Case $A_ID_Deactivate
+			If ($Mode = $M_Index) Then
+				_GUICtrlListView_SetItemChecked($hListView, $Index, False)
+			ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+				For $i = 1 To $SelIndices[0] Step 1
+				_GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], False)
+				Next
+			ElseIf ($Mode = $M_All) Then
+				For $i = 0 To $Count - 1 Step 1
+					_GUICtrlListView_SetItemChecked($hListView, $i, False)
+				Next
+			EndIf
 
-	  Case $A_ID_Open
-		 $filepath = 0
-		 If ($Mode = $M_Index) Then
-			$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, $Index, 2)
-		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
-			$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, $SelIndices[1], 2)
-		 ElseIf ($Mode = $M_All) Then
-			$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, 0, 2)
-		 EndIf
-		 If (IsString($filepath)) Then
-			AddFiles($filepath)
-		 EndIf
+		Case $A_ID_Open
+			$filepath = 0
+			If ($Mode = $M_Index) Then
+				$filepath = _GUICtrlListView_GetItemText($hListView, $Index, 2)
+			ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+				$filepath = _GUICtrlListView_GetItemText($hListView, $SelIndices[1], 2)
+			ElseIf ($Mode = $M_All) Then
+				$filepath = _GUICtrlListView_GetItemText($hListView, 0, 2)
+			EndIf
+			If (IsString($filepath)) Then
+				AddFiles($filepath)
+			EndIf
 
-	  Case $A_ID_SelectAll
-		 _GUICtrlListView_SetItemSelected($hListView, -1)
+		Case $A_ID_SelectAll
+			_GUICtrlListView_SetItemSelected($hListView, -1)
 
-	  Case $A_ID_Delete
-		 If ($Mode = $M_Index) Then
-			_GUICtrlListView_DeleteItem($hListView, $Index)
-		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
-			For $i = $SelIndices[0] To 1 Step -1
-			   _GUICtrlListView_DeleteItem($hListView, $SelIndices[$i])
-			Next
-		 ElseIf ($Mode = $M_All) Then
-			_GUICtrlListView_DeleteAllItems($hListView)
-		 EndIf
+		Case $A_ID_Delete
+			If ($Mode = $M_Index) Then
+				_GUICtrlListView_DeleteItem($hListView, $Index)
+			ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+				For $i = $SelIndices[0] To 1 Step -1
+				   _GUICtrlListView_DeleteItem($hListView, $SelIndices[$i])
+				Next
+			ElseIf ($Mode = $M_All) Then
+				_GUICtrlListView_DeleteAllItems($hListView)
+			EndIf
 
-   EndSwitch
+	EndSwitch
 
 EndFunc   ;==>UpdateLV
 
@@ -722,6 +757,8 @@ Func GUI_GUI_WM_NOTIFY($hwnd, $uMsg, $wParam, $lParam)
 			DllList_PopUp($hListView)
 
 		ElseIf ($tNMHDR.code = $NM_CUSTOMDRAW) Then
+
+			$l_UpdateProcess = True
 
 		    If (_GUICtrlListView_GetColumnWidth($h_L_Dlls, 0) <> 18) Then
 				_GUICtrlListView_SetColumnWidth($h_L_Dlls, 0, 18)
@@ -794,113 +831,117 @@ EndFunc   ;==>WM_COMMAND
 
 Func ResetGUI()
 
-		GUICtrlSetState($h_R_ProcName, $GUI_CHECKED)
-		GUICtrlSetState($h_I_ProcName, $GUI_ENABLE)
-		GUICtrlSetState($h_I_PID, $GUI_DISABLE)
+	GUICtrlSetState($h_R_ProcName, $GUI_CHECKED)
+	GUICtrlSetState($h_I_ProcName, $GUI_ENABLE)
+	GUICtrlSetState($h_I_PID, $GUI_DISABLE)
 
-		GUICtrlSetData($h_I_ProcName, $g_Processname)
-		GUICtrlSetData($h_I_PID, $g_PID)
+	GUICtrlSetData($h_I_ProcName, $g_Processname)
+	GUICtrlSetData($h_I_PID, $g_PID)
 
-		GUICtrlSetData($h_I_InjDelay, $g_InjectionDelay)
+	GUICtrlSetData($h_I_InjDelay, $g_InjectionDelay)
 
-		If ($g_CloseAfterInjection) Then
-			GUICtrlSetState($h_C_CloseAI, $GUI_CHECKED)
+	If ($g_CloseAfterInjection) Then
+		GUICtrlSetState($h_C_CloseAI, $GUI_CHECKED)
+	Else
+		GUICtrlSetState($h_C_CloseAI, $GUI_UNCHECKED)
+	EndIf
+
+	If ($g_AutoInjection) Then
+		GUICtrlSetState($h_C_AutoI, $GUI_CHECKED)
+	Else
+		GUICtrlSetState($h_C_AutoI, $GUI_UNCHECKED)
+	EndIf
+
+	_GUICtrlComboBox_SetCurSel($h_C_Method, $g_InjectionMethod)
+
+	If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE) AND $g_RunNative) Then
+		GUICtrlSetState($h_C_HijackHandle, BitOR($GUI_CHECKED, $GUI_ENABLE))
+	ElseIf (NOT $g_RunNative) Then
+		GUICtrlSetState($h_C_HijackHandle, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+		GUICtrlSetData($h_L_HijackHandle, $GUI_ENABLE)
+	Else
+		GUICtrlSetData($h_L_HijackHandle, $GUI_DISABLE)
+		GUICtrlSetState($h_C_HijackHandle, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
+	EndIf
+
+	_GUICtrlComboBox_SetCurSel($h_C_LaunchMethod, $g_LaunchMethod)
+
+	If ($g_LaunchMethod = 0) Then
+		GUICtrlSetState($h_L_CloakThread, $GUI_DISABLE)
+		$state = 0
+		If (BitAND($g_InjectionFlags, $INJ_THREAD_CREATE_CLOAKED)) Then
+			$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
 		Else
-			GUICtrlSetState($h_C_CloseAI, $GUI_UNCHECKED)
+			$state = BitOR($GUI_UNCHECKED, $GUI_ENABLE)
 		EndIf
+		GUICtrlSetState($h_C_CloakThread, $state)
+	Else
+		GUICtrlSetState($h_C_CloakThread, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+		GUICtrlSetState($h_L_CloakThread, $GUI_ENABLE)
+	EndIf
 
-		If ($g_AutoInjection) Then
-			GUICtrlSetState($h_C_AutoI, $GUI_CHECKED)
+	_GUICtrlComboBox_SetCurSel($h_C_Header, 0)
+	If (BitAND($g_InjectionFlags, $INJ_ERASE_HEADER)) Then
+		_GUICtrlComboBox_SetCurSel($h_C_Header, 1)
+	ElseIf (BitAND($g_InjectionFlags, $INJ_ERASE_HEADER)) Then
+		_GUICtrlComboBox_SetCurSel($h_C_Header, 2)
+	EndIf
+
+	If($g_InjectionMethod = 2) Then
+		GUICtrlSetState($h_C_Unlink, BitOR($GUI_CHECKED, $GUI_DISABLE))
+		GUICtrlSetState($h_L_Unlink, $GUI_ENABLE)
+	ElseIf (BitAND($g_InjectionFlags, $INJ_UNLINK_FROM_PEB)) Then
+		GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
+		GUICtrlSetState($h_C_Unlink, BitOR($GUI_CHECKED, $GUI_ENABLE))
+	Else
+		GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
+		GUICtrlSetState($h_C_Unlink, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
+	EndIf
+
+	If ($g_InjectionMethod <> 2) Then
+		GUICtrlSetState($h_C_Shift, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+		GUICtrlSetState($h_L_Shift, $GUI_ENABLE)
+		GUICtrlSetState($h_C_Clean, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+		GUICtrlSetState($h_L_Clean, $GUI_ENABLE)
+	Else
+		GUICtrlSetState($h_L_Shift, $GUI_DISABLE)
+		$state = 0
+		If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
+			$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
 		Else
-			GUICtrlSetState($h_C_AutoI, $GUI_UNCHECKED)
+			$state = BitOR($GUI_CHECKED, $GUI_DISABLE)
 		EndIf
+		GUICtrlSetState($h_C_Shift, $state)
 
-		_GUICtrlComboBox_SetCurSel($h_C_Method, $g_InjectionMethod)
-
-		;If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
-			;GUICtrlSetState($h_C_HijackHandle, BitOR($GUI_CHECKED, $GUI_ENABLE))
-		;Else
-			;GUICtrlSetState($h_C_HijackHandle, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
-		;EndIf
-
-		_GUICtrlComboBox_SetCurSel($h_C_LaunchMethod, $g_LaunchMethod)
-
-		If ($g_LaunchMethod = 0) Then
-			GUICtrlSetState($h_L_HTFD, $GUI_DISABLE)
-			$state = 0
-			If (BitAND($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)) Then
-				$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
-			Else
-				$state = BitOR($GUI_UNCHECKED, $GUI_ENABLE)
-			EndIf
-			GUICtrlSetState($h_C_HTFD, $state)
+		GUICtrlSetState($h_L_Clean, $GUI_DISABLE)
+		$state = 0
+		If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
+			$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
 		Else
-			GUICtrlSetState($h_C_HTFD, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
-			GUICtrlSetState($h_L_HTFD, $GUI_ENABLE)
+			$state = BitOR($GUI_CHECKED, $GUI_DISABLE)
 		EndIf
+		GUICtrlSetState($h_C_Clean, $state)
+	EndIf
 
-		_GUICtrlComboBox_SetCurSel($h_C_Header, 0)
-		If (BitAND($g_InjectionFlags, $INJ_ERASE_HEADER)) Then
-			_GUICtrlComboBox_SetCurSel($h_C_Header, 1)
-		ElseIf (BitAND($g_InjectionFlags, $INJ_ERASE_HEADER)) Then
-			_GUICtrlComboBox_SetCurSel($h_C_Header, 2)
-		EndIf
+	If (BitAND($g_InjectionFlags, $INJ_SCRAMBLE_DLL_NAME)) Then
+		GUICtrlSetState($h_C_RandomizeName, $GUI_CHECKED)
+	Else
+		GUICtrlSetState($h_C_RandomizeName, $GUI_UNCHECKED)
+	EndIf
 
-		If($g_InjectionMethod = 2) Then
-			GUICtrlSetState($h_C_Unlink, BitOR($GUI_CHECKED, $GUI_DISABLE))
-			GUICtrlSetState($h_L_Unlink, $GUI_ENABLE)
-		ElseIf (BitAND($g_InjectionFlags, $INJ_UNLINK_FROM_PEB)) Then
-			GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
-			GUICtrlSetState($h_C_Unlink, BitOR($GUI_CHECKED, $GUI_ENABLE))
-		Else
-			GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
-			GUICtrlSetState($h_C_Unlink, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
-		EndIf
+	If (BitAND($g_InjectionFlags, $INJ_LOAD_DLL_COPY)) Then
+		GUICtrlSetState($h_C_LoadCopy, $GUI_CHECKED)
+	Else
+		GUICtrlSetState($h_C_LoadCopy, $GUI_UNCHECKED)
+	EndIf
 
-		If ($g_InjectionMethod <> 2) Then
-			GUICtrlSetState($h_C_Shift, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
-			GUICtrlSetState($h_L_Shift, $GUI_ENABLE)
-			GUICtrlSetState($h_C_Clean, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
-			GUICtrlSetState($h_L_Clean, $GUI_ENABLE)
-		Else
-			GUICtrlSetState($h_L_Shift, $GUI_DISABLE)
-			$state = 0
-			If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
-				$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
-			Else
-				$state = BitOR($GUI_CHECKED, $GUI_DISABLE)
-			EndIf
-			GUICtrlSetState($h_C_Shift, $state)
-
-			GUICtrlSetState($h_L_Clean, $GUI_DISABLE)
-			$state = 0
-			If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
-				$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
-			Else
-				$state = BitOR($GUI_CHECKED, $GUI_DISABLE)
-			EndIf
-			GUICtrlSetState($h_C_Clean, $state)
-		EndIf
-
-		If (BitAND($g_InjectionFlags, $INJ_SCRAMBLE_DLL_NAME)) Then
-			GUICtrlSetState($h_C_RandomizeName, $GUI_CHECKED)
-		Else
-			GUICtrlSetState($h_C_RandomizeName, $GUI_UNCHECKED)
-		EndIf
-
-		If (BitAND($g_InjectionFlags, $INJ_LOAD_DLL_COPY)) Then
-			GUICtrlSetState($h_C_LoadCopy, $GUI_CHECKED)
-		Else
-			GUICtrlSetState($h_C_LoadCopy, $GUI_UNCHECKED)
-		EndIf
-
-		If ($g_ToolTipsOn = False) Then
-			_GUIToolTip_Deactivate($h_T_TooltipCtrl)
-			GUICtrlSetData($h_B_ToggleTips, "Enable Tooltips")
-		Else
-			_GUIToolTip_Activate($h_T_TooltipCtrl)
-			GUICtrlSetData($h_B_ToggleTips, "Disable Tooltips")
-		EndIf
+	If ($g_ToolTipsOn = False) Then
+		_GUIToolTip_Deactivate($h_T_TooltipCtrl)
+		GUICtrlSetData($h_B_ToggleTips, "Enable Tooltips")
+	Else
+		_GUIToolTip_Activate($h_T_TooltipCtrl)
+		GUICtrlSetData($h_B_ToggleTips, "Disable Tooltips")
+	EndIf
 
 EndFunc   ;==>ResetGUI
 
@@ -924,7 +965,7 @@ Func CloseGUI()
 
 EndFunc   ;==>CloseGUI
 
-Func CheckBanner()
+Func UpdateCursor()
 
 	Local $CursorInfo = GUIGetCursorInfo($h_GUI)
 
@@ -961,7 +1002,7 @@ Func CheckBanner()
 		$l_HoverBannerPrev = $l_HoverBanner
 	EndIf
 
-EndFunc   ;==>CheckBanner
+EndFunc   ;==>UpdateCursor
 
 Func AddFile($Path, $UpdateLastDirectory = False)
 
@@ -1064,7 +1105,7 @@ Func UpdateProcessIcon($TargetPID)
 			If (IsArray($dllRet) AND ($dllRet[0] <> 0)) Then
 				$l_ProcIconIndex = 4
 				_GUIImageList_Remove($h_P_ProcIcon, 4)
-				$g_ExePath = $dllRet[3]
+				$g_ExePath = $dllRet[3] & " (" & $l_TargetProcessArchitecture & ")"
 				If (_GUIImageList_AddIcon($h_P_ProcIcon, $dllRet[3], 0, True) = -1) Then
 					$l_ProcIconIndex = 1
 				EndIf
@@ -1096,8 +1137,8 @@ Func UpdateTargetProcess()
 
 	If ($g_ProcessByName) Then
 		$g_Processname = GUICtrlRead($h_I_ProcName)
-		$lPID1 = ProcessExists($g_Processname)
-		$lPID2 = ProcessExists($g_PID)
+		$lPID1 = SearchProcessList($g_ProcessList, 0, $g_Processname, False)
+		$lPID2 = SearchProcessList($g_ProcessList, $g_PID, 0, False)
 
 		If ($l_ChangedFont = True) Then
 			GUICtrlSetFont($h_I_ProcName, 9)
@@ -1107,7 +1148,7 @@ Func UpdateTargetProcess()
 		If ($lPID1) Then
 			If ($lPID2) Then
 				If ($lPID1 <> $lPID2) Then
-					If (NOT StringCompare($g_Processname, _ProcessGetName($lPID2))) Then
+					If (NOT StringCompare($g_Processname, SearchProcessList($g_ProcessList, $lPID2, 0, True))) Then
 						$g_PID = $lPID2
 					Else
 						$g_PID = $lPID1
@@ -1123,7 +1164,7 @@ Func UpdateTargetProcess()
 		GUICtrlSetData($h_I_PID, $g_PID)
 	Else
 		$g_PID = GUICtrlRead($h_I_PID)
-		$g_Processname = _ProcessGetName($g_PID)
+		$g_Processname = SearchProcessList($g_ProcessList, $g_PID, 0, True)
 
 		If (@error) Then
 			GUICtrlSetFont($h_I_ProcName, 9, $FW_LIGHT, $GUI_FONTITALIC)
@@ -1136,7 +1177,12 @@ Func UpdateTargetProcess()
 		GUICtrlSetData($h_I_ProcName, $g_Processname)
 	EndIf
 
-	UpdateProcessIcon(ProcessExists($g_PID))
+	$Arch = GetProcessArch($g_PID)
+	If (IsString($Arch)) Then
+		$l_TargetProcessArchitecture = $Arch
+	EndIf
+
+	UpdateProcessIcon($g_PID)
 
 	$l_ProcessDead = False
 
@@ -1144,12 +1190,45 @@ Func UpdateTargetProcess()
 
 EndFunc   ;==>UpdateTargetProcess
 
+Func SearchProcessList($List, $PID, $Name, $bRetName)
+
+	For $i = 1 To $List[0][0] Step 1
+		If ($PID <> 0) Then
+			If ($List[$i][1] = $PID) Then
+				If ($bRetName = True) Then
+					Return $List[$i][0]
+				Else
+					Return $PID
+				EndIf
+			EndIf
+		Else
+			If ($List[$i][0] = $Name) Then
+				If ($bRetName = True) Then
+					Return $Name
+				Else
+					Return $List[$i][1]
+				EndIf
+			EndIf
+		EndIf
+	Next
+
+	Return 0
+
+EndFunc
+
 Func UpdateGUI()
 
 	If ($l_DoubleClickedDll <> -1) Then
-		$filepath 	= _GUICtrlListView_GetItemText($h_L_Dlls, $l_DoubleClickedDll, 2)
+		$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, $l_DoubleClickedDll, 2)
 		AddFiles($filepath)
 		$l_DoubleClickedDll = -1
+	EndIf
+
+	$current_tick = _WinAPI_GetTickCount()
+	If ($current_tick - $last_tick > 150) Then
+		$last_tick = $current_tick
+		$l_UpdateByTickCount = True
+		$g_ProcessList = ProcessList()
 	EndIf
 
 	$Msg = GUIGetMsg($h_GUI)
@@ -1169,12 +1248,18 @@ Func UpdateGUI()
 			$l_ProcessPickerActive 	= True
 			$l_IgnoreInputChange 	= True
 
-			$newPID = CreateProcessList()
+			$newPID = CreateProcessList($g_ProcessList)
 			If ($newPID <> -1) Then
 				$g_PID = $newPID
 				GUICtrlSetData($h_I_PID, $g_PID)
-				$g_Processname = _ProcessGetName($g_PID)
+				$g_Processname = SearchProcessList($g_ProcessList, $g_PID, 0, True)
 				GUICtrlSetData($h_I_ProcName, $g_Processname)
+
+				$Arch = GetProcessArch($g_PID)
+				If (IsString($Arch)) Then
+					$l_TargetProcessArchitecture = $Arch
+				EndIf
+
 				UpdateProcessIcon($g_PID)
 			EndIf
 
@@ -1307,38 +1392,35 @@ Func UpdateGUI()
 				EndIf
 			EndIf
 
-		;Case $Msg = $h_C_HijackHandle
-			;If (GUICtrlRead($h_C_HijackHandle) = $GUI_CHECKED) Then
-				;If (NOT BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
-					;$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_HIJACK_HANDLE)
-					;MsgBox($MB_ICONWARNING, "Warning", "Handle hijacking attempts to use a handle of a system process. "  _
-						;& "Since this option is still under development it can cause that process to crash which can result in an automated shutdown or even a BSOD." & @CRLF & @CRLF _
-						;& "Use at your own risk.")
-				;EndIf
-			;Else
-				;If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
-					;$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_HIJACK_HANDLE)
-				;EndIf
-			;EndIf
+		Case $Msg = $h_C_HijackHandle
+			If (GUICtrlRead($h_C_HijackHandle) = $GUI_CHECKED) Then
+				If (NOT BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+					$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_HIJACK_HANDLE)
+				EndIf
+			Else
+				If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+					$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_HIJACK_HANDLE)
+				EndIf
+			EndIf
 
 		Case $Msg = $h_C_LaunchMethod
 			$g_LaunchMethod = _GUICtrlComboBox_GetCurSel($h_C_LaunchMethod)
-			If (($g_LaunchMethod) AND (BitAND(GUICtrlGetState($h_C_HTFD), $GUI_ENABLE))) Then
-				GUICtrlSetState($h_C_HTFD, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
-				GUICtrlSetState($h_L_HTFD, $GUI_ENABLE)
-				If (BitAND($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)) Then
-					$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)
+			If (($g_LaunchMethod) AND (BitAND(GUICtrlGetState($h_C_CloakThread), $GUI_ENABLE))) Then
+				GUICtrlSetState($h_C_CloakThread, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+				GUICtrlSetState($h_L_CloakThread, $GUI_ENABLE)
+				If (BitAND($g_InjectionFlags, $INJ_THREAD_CREATE_CLOAKED)) Then
+					$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_THREAD_CREATE_CLOAKED)
 				EndIf
-			ElseIf (($g_LaunchMethod = 0) AND (BitAND(GUICtrlGetState($h_C_HTFD), $GUI_DISABLE))) Then
-				GUICtrlSetState($h_L_HTFD, $GUI_DISABLE)
-				GUICtrlSetState($h_C_HTFD, $GUI_ENABLE)
+			ElseIf (($g_LaunchMethod = 0) AND (BitAND(GUICtrlGetState($h_C_CloakThread), $GUI_DISABLE))) Then
+				GUICtrlSetState($h_L_CloakThread, $GUI_DISABLE)
+				GUICtrlSetState($h_C_CloakThread, $GUI_ENABLE)
 			EndIf
 
-		Case $Msg = $h_C_HTFD
-			If (GUICtrlRead($h_C_HTFD) = $GUI_CHECKED) Then
-				$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)
-			ElseIf (BitAND($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)) Then
-				$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)
+		Case $Msg = $h_C_CloakThread
+			If (GUICtrlRead($h_C_CloakThread) = $GUI_CHECKED) Then
+				$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_THREAD_CREATE_CLOAKED)
+			ElseIf (BitAND($g_InjectionFlags, $INJ_THREAD_CREATE_CLOAKED)) Then
+				$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_THREAD_CREATE_CLOAKED)
 			EndIf
 
 		Case $Msg = $h_C_Header
@@ -1424,26 +1506,33 @@ Func UpdateGUI()
 				$g_ToolTipsOn = True
 			EndIf
 
-
 	EndSelect
 
-	If ($g_ProcessByName AND ProcessExists($g_Processname) AND NOT ProcessExists($g_PID)) Then
-		UpdateTargetProcess()
-	ElseIf(NOT $g_ProcessByName AND NOT $l_UpdateProcess AND ProcessExists($g_Processname) AND NOT ProcessExists($g_PID)) Then
-		$g_ProcessByName = True
-		UpdateTargetProcess()
-		$g_ProcessByName = False
-	ElseIf(NOT ProcessExists($g_Processname) AND NOT ProcessExists($g_PID) AND NOT $l_ProcessDead) Then
-		UpdateProcessIcon(0)
-		$l_ProcessDead = True
+	If ($l_UpdateByTickCount = True) Then
+		$pid_by_name 	=  SearchProcessList($g_ProcessList, 0, $g_Processname, False)
+		$pid_by_pid 	=  SearchProcessList($g_ProcessList, $g_PID, 0, False)
+
+		If ($g_ProcessByName AND $pid_by_name AND NOT $pid_by_pid) Then
+			UpdateTargetProcess()
+		ElseIf(NOT $g_ProcessByName AND NOT $l_UpdateProcess AND $pid_by_name AND NOT $pid_by_pid) Then
+			$g_ProcessByName = True
+			UpdateTargetProcess()
+			$g_ProcessByName = False
+		ElseIf(NOT $pid_by_name AND NOT $pid_by_pid AND NOT $l_ProcessDead) Then
+			UpdateProcessIcon(0)
+			$l_ProcessDead = True
+		EndIf
+
+		If ($l_UpdateProcess) Then
+			UpdateTargetProcess()
+			$l_UpdateProcess = False
+		EndIf
+
+		$l_UpdateByTickCount = False
 	EndIf
 
-	If ($l_UpdateProcess) Then
-		UpdateTargetProcess()
-		$l_UpdateProcess = False
-	EndIf
+	UpdateCursor()
 
-	CheckBanner()
 
 	Return $GUI_RETURN
 

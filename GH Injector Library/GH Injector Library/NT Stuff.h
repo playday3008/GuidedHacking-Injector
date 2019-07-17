@@ -10,7 +10,9 @@
 	#define NT_SUCCESS(status) (status >= 0)
 #endif
 
-#define THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER 4
+#define THREAD_CREATE_FLAGS_CREATE_SUSPENDED	0x00000001
+#define THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH  0x00000002
+#define THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER	0x00000004
 
 struct UNICODE_STRING
 {
@@ -60,9 +62,15 @@ struct PROCESS_BASIC_INFORMATION
 	HANDLE		InheritedFromUniqueProcessId;
 };
 
+struct PROCESS_SESSION_INFORMATION
+{
+	ULONG SessionId;
+};
+
 enum _PROCESSINFOCLASS
 {
-	ProcessBasicInformation
+	ProcessBasicInformation		= 0,
+	ProcessSessionInformation	= 24
 };
 typedef _PROCESSINFOCLASS PROCESSINFOCLASS;
 
@@ -91,6 +99,65 @@ struct _SYSTEM_HANDLE_INFORMATION
 	SYSTEM_HANDLE_TABLE_ENTRY_INFO Handles[1];
 };
 typedef _SYSTEM_HANDLE_INFORMATION SYSTEM_HANDLE_INFORMATION;
+
+enum _OBEJECT_TYPE_INDEX : BYTE
+{
+	OTI_Unknown00				= 0x00,
+	OTI_Unknown01				= 0x01,
+	OTI_Unknown02				= 0x00,
+	OTI_Directory				= 0x03,
+	OTI_Unknown04				= 0x04,
+	OTI_Token					= 0x05,
+	OTI_Job						= 0x06,
+	OTI_Process					= 0x07,
+	OTI_Thread					= 0x08,
+	OTI_Unknown09				= 0x09,
+	OTI_IoCompletionReserve		= 0x0A,
+	OTI_Unknown0B				= 0x0B,
+	OTI_Unknown0C				= 0x0C,
+	OTI_Unknown0D				= 0x0D,
+	OTI_DebugObject				= 0x0E,
+	OTI_Event					= 0x0F,
+	OTI_Mutant					= 0x10,
+	OTI_Unknown11				= 0x11,
+	OTI_Semaphore				= 0x12,
+	OTI_Timer					= 0x13,
+	OTI_IRTimer					= 0x14,
+	OTI_Unknown15				= 0x15,
+	OTI_Unknown16				= 0x16,
+	OTI_WindowStation			= 0x17,
+	OTI_Desktop					= 0x18,
+	OTI_Composition				= 0x19,
+	OTI_RawInputManager			= 0x1A,
+	OTI_Unknown1B				= 0x1B,
+	OTI_TpWorkerFactory			= 0x1C,
+	OTI_Unknown1D				= 0x1D,
+	OTI_Unknown1E				= 0x1E,
+	OTI_Unknown1F				= 0x1F,
+	OTI_Unknown20				= 0x20,
+	OTI_IoCompletion			= 0x21,
+	OTI_WaitCompletionPacket	= 0x22,
+	OTI_File					= 0x23,
+	OTI_Unknown24				= 0x24,
+	OTI_Unknown25				= 0x25,
+	OTI_Unknown26				= 0x26,
+	OTI_Unknown27				= 0x27,
+	OTI_Section					= 0x28,
+	OTI_Session					= 0x29,
+	OTI_Partition				= 0x2A,
+	OTI_Key						= 0x2B,
+	OTI_Unknown2C				= 0x2C,
+	OTI_ALPC_Port				= 0x2D,
+	OTI_Unknown2E				= 0x2E,
+	OTI_WmiGuid					= 0x2F,
+	OTI_Unknown30				= 0x30,
+	OTI_Unknown31				= 0x31,
+	OTI_Unknown32				= 0x32,
+	OTI_Unknown33				= 0x33,
+	OTI_Unknown34				= 0x34,
+	OTI_Unknown35				= 0x35,
+};
+typedef _OBEJECT_TYPE_INDEX OBJECT_TYPE_INDEX;
 
 enum THREAD_STATE
 {
@@ -198,9 +265,51 @@ typedef struct _SYSTEM_PROCESS_INFORMATION
 	SYSTEM_THREAD_INFORMATION Threads[1];
 } SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION;
 
+#ifdef _WIN64
 
-using f_NtCreateThreadEx			= NTSTATUS(__stdcall*)(HANDLE * pHandle, ACCESS_MASK DesiredAccess, void * pAttr, HANDLE hProc, void * pFunc, void * pArg,
+struct UNICODE_STRING32
+{
+	WORD	Length;
+	WORD	MaxLength;
+	DWORD	szBuffer;
+};
+
+struct LDR_DATA_TABLE_ENTRY32
+{
+	LIST_ENTRY32		InLoadOrder;
+	LIST_ENTRY32		InMemoryOrder;
+	LIST_ENTRY32		InInitOrder;
+	DWORD				DllBase;
+	DWORD				EntryPoint;
+	ULONG				SizeOfImage;
+	UNICODE_STRING32	FullDllName;
+	UNICODE_STRING32	BaseDllName;
+};
+
+struct PEB_LDR_DATA32
+{
+	ULONG			Length;
+	BYTE			Initialized;
+	DWORD			SsHandle;
+	LIST_ENTRY32	InLoadOrderModuleListHead;
+	LIST_ENTRY32	InMemoryOrderModuleListHead;
+	LIST_ENTRY32	InInitializationOrderModuleListHead;
+	DWORD			EntryInProgress;
+	BYTE			ShutdownInProgress;
+	DWORD			ShutdownThreadId;
+};
+
+struct PEB32
+{
+	DWORD Reserved[3];
+	DWORD Ldr;
+};
+
+#endif
+
+using f_NtCreateThreadEx			= NTSTATUS	(__stdcall*)(HANDLE * pHandle, ACCESS_MASK DesiredAccess, void * pAttr, HANDLE hProc, void * pFunc, void * pArg,
 										ULONG Flags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaxStackSize, void * pAttrListOut);
-using f_LdrLoadDll					= NTSTATUS(__stdcall*)(wchar_t * szOptPath, ULONG ulFlags, UNICODE_STRING * pModuleFileName, HANDLE * pOut);
-using f_NtQueryInformationProcess	= NTSTATUS(__stdcall*)(HANDLE hProc, PROCESSINFOCLASS PIC, void * pBuffer, ULONG BufferSize, ULONG * SizeOut);
-using f_NtQuerySystemInformation	= NTSTATUS(__stdcall*)(SYSTEM_INFORMATION_CLASS SIC, void * pBuffer, ULONG BufferSize, ULONG * SizeOut);
+using f_LdrLoadDll					= NTSTATUS	(__stdcall*)(wchar_t * szOptPath, ULONG ulFlags, UNICODE_STRING * pModuleFileName, HANDLE * pOut);
+using f_NtQueryInformationProcess	= NTSTATUS	(__stdcall*)(HANDLE hProc, PROCESSINFOCLASS PIC, void * pBuffer, ULONG BufferSize, ULONG * SizeOut);
+using f_NtQuerySystemInformation	= NTSTATUS	(__stdcall*)(SYSTEM_INFORMATION_CLASS SIC, void * pBuffer, ULONG BufferSize, ULONG * SizeOut);
+using f_RtlQueueApcWow64Thread		= NTSTATUS	(__stdcall*)(HANDLE hThread, void * pRoutine, void * pArg1, void * pArg2, void * pArg3);

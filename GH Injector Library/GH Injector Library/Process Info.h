@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NT Stuff.h"
+#include "Tools.h"
 
 class ProcessInfo
 {
@@ -28,6 +28,10 @@ public:
 
 	PEB * GetPEB();
 	DWORD GetPID();
+
+	bool IsNative();
+
+	void * GetEntrypoint();
 
 	DWORD GetTID();
 	bool GetThreadState(THREAD_STATE & state, KWAIT_REASON & reason);

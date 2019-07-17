@@ -45,6 +45,16 @@
 ; Return Value(s).:  On Success - Returns true (process is x64) or false (process is not x64).
 ;                    On Failure - Returns 0.
 ;===================================================================================================
+; Function........:  GetProcessArch($PID)
+;
+; Description.....:  Returns the architecture of a process as a platform string (VS Style).
+;
+; Parameter(s)....:  $PID	- The process identifier of the process. This function will try to open
+;								a process handle with PROCESS_QUERY_LIMITED_INFORMATION.
+;
+; Return Value(s).:  On Success - Returns either "x64" or "x86" depending on the architecture.
+;                    On Failure - Returns "---".
+;===================================================================================================
 
 #include <WinAPI.au3>
 #include <WinAPIEx.au3>
@@ -148,24 +158,11 @@ EndFunc   ;==>GetNTHeader
 
 Func Is64BitProcess($hTargetProcess)
 
-	$bIs64BitWin = False
-
-	$bOut = False
-	Local $bRet = DllCall("kernel32.dll", _
-		"BOOL", "IsWow64Process", _
-			"HANDLE", 	-1, _
-			"BOOL*", 	$bOut _
-	)
-
-	If (NOT IsArray($bRet) OR ($bRet[0] = 0)) Then
+	If (NOT @AutoItX64) Then
 		Return 0
 	EndIf
 
-	$bOut = $bRet[2]
-	If ($bOut <> 0) Then
-		$bIs64BitWin = True
-	EndIf
-
+	$bOut = False
 	Local $bRet = DllCall("kernel32.dll", _
 		"BOOL", "IsWow64Process", _
 			"HANDLE", 	$hTargetProcess, _
@@ -173,14 +170,45 @@ Func Is64BitProcess($hTargetProcess)
 	)
 
 	If (NOT IsArray($bRet) OR ($bRet[0] = 0)) Then
-		Return 0
+		Return -1
 	EndIf
 
 	$bOut = $bRet[2]
-	If ($bIs64BitWin AND NOT $bOut) Then
-		Return True
+
+	If ($bOut <> 0) Then
+		Return 0
 	EndIf
 
-	Return False
+	Return 1
 
 EndFunc   ;==>Is64BitProcess
+
+Func GetProcessArch($PID)
+
+	$hProc_info = DllCall("kernel32.dll", _
+		"HANDLE", "OpenProcess", _
+			"DWORD", 	$PROCESS_QUERY_LIMITED_INFORMATION, _
+			"INT", 		0, _
+			"DWORD", 	$PID _
+	)
+
+	If (NOT IsArray($hProc_info) OR ($hProc_info[0] = 0)) Then
+		return 0
+	EndIf
+
+	$ret = Is64BitProcess($hProc_info[0])
+
+	DllCall("kernel32.dll", _
+		"BOOL", "CloseHandle", _
+			"HANDLE", $hProc_info[0] _
+	)
+
+	If ($ret = 1) Then
+		Return "x64"
+	ElseIf ($ret = 0) Then
+		Return "x86"
+	Else
+		Return 0
+	EndIf
+
+EndFunc   ;==>GetProcessArch

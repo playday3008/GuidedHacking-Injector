@@ -1,4 +1,5 @@
 ;FUNCTION LIST IN FILE ORDER:
+;FUNCTION LIST IN FILE ORDER:
 
 ;===================================================================================================
 ; Function........:  SaveSettings()
@@ -67,6 +68,8 @@ EndFunc   ;==>SaveFiles
 
 Func ResetSettings()
 
+	FileDelete($g_LogPath)
+
 	IniDelete($g_ConfigPath, "CONFIG")
 
 	$g_Processname 			= "Broihon.exe"
@@ -134,9 +137,8 @@ Func LoadFiles($h_DllList)
 
 			If ($FileTicked = 1) Then
 				_GUICtrlListView_SetItemChecked($h_DllList, $i)
+				_GUICtrlListView_AddSubItem($h_DllList, $i, 1, 4)
 			EndIf
-		Else
-			IniDelete($g_ConfigPath, "FILES", $Files[$i + 1][0])
 		EndIf
 	Next
 
