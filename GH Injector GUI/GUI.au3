@@ -365,7 +365,7 @@ Func CreateGUI()
 
 			GUIStartGroup()
 				$h_C_Method	= GUICtrlCreateCombo("", 20, 230, 121, -1, $CBS_DROPDOWNLIST)
-					GUICtrlSetData($h_C_Method, "LoadLibraryExW|LdrLodDll|ManualMap", "LoadLibraryExW")
+					GUICtrlSetData($h_C_Method, "LoadLibraryExW|LdrLoadDll|ManualMap", "LoadLibraryExW")
 					_GUICtrlComboBox_SetCurSel($h_C_Method, $g_InjectionMethod)
 
 					$h_L_HijackHandle = GUICtrlCreateLabel("", 150, 230, 100, 20)

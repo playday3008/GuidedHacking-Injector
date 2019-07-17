@@ -48,8 +48,8 @@ Func Main()
 
 	EndIf
 
-	$hInjectionDll = DllOpen($g_InjectionDll_Name)
-	If ($hInjectionDll = -1) Then
+	$g_hInjectionDll = DllOpen($g_InjectionDll_Name)
+	If ($g_hInjectionDll = -1) Then
 
 		MsgBox($MB_ICONERROR, "Error", "Can't load " & $g_InjectionDll_Name & "." & @CRLF & "Errorcode: " & @error)
 		Exit
@@ -61,7 +61,7 @@ Func Main()
 	LoadSettings()
 
 	If NOT($g_IgnoreUpdates) Then
-		Update()
+		Update(0)
 	EndIf
 
 	$hGUI = CreateGUI()
@@ -86,11 +86,13 @@ Func Main()
 			EndIf
 
 		ElseIf ($GUI_MSG = $GUI_UPDATE) Then
-			Update()
+			Update($hGUI)
 		EndIf
 
 		Sleep(10)
 	WEnd
+
+	DllClose($g_hInjectionDll)
 
 	SaveFiles($h_L_Dlls)
 

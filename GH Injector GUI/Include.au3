@@ -17,15 +17,17 @@
 #include <WinAPI.au3>
 #include <WinAPIEx.au3>
 #include <WindowsConstants.au3>
+#include <Zip.au3>
 
 #Region Global Definitions
 
-Global Const 	$g_CurrentVersion 		= "3.0"
-Global 			$g_NewestVersion 		= "3.0"
+Global Const 	$g_CurrentVersion 		= "3.1"
+Global 			$g_NewestVersion 		= "3.1"
 Global Const 	$g_ConfigPath 			= @ScriptDir & "\GH Injector Config.ini"
 Global Const 	$g_LogPath				= @ScriptDir & "\GH_Inj_Log.txt"
 Global			$g_RunNative			= True
 Global			$g_InjectionDll_Name	= ""
+Global			$g_hInjectionDll 		= 0
 
 Global $g_Processname 			= "Broihon.exe"
 Global $g_PID					= 0

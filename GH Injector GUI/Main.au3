@@ -9,6 +9,11 @@
 #AutoIt3Wrapper_UseUpx=y
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 
+If (FileExists("OLD.exe")) Then
+	ProcessClose("OLD.exe")
+	FileDelete("OLD.exe")
+EndIf
+
 If (@OSArch = "X86") Then
 
 	If NOT (FileExists("GH Injector - x86.exe")) Then
