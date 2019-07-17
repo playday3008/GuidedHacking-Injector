@@ -1,9 +1,5 @@
 #pragma once
 
-#ifndef TOOLS_H
-#define TOOLS_H
-
-#include <Windows.h>
 #include "NT Stuff.h"
 
 UINT __forceinline _strlenA(const char * szString)
@@ -23,5 +19,3 @@ bool __forceinline FileExistsA(const char * szFile)
 {
 	return (GetFileAttributesA(szFile) != INVALID_FILE_ATTRIBUTES);
 }
-
-#endif

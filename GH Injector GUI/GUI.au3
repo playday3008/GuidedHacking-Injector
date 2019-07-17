@@ -1,5 +1,163 @@
+;FUNCTION LIST IN FILE ORDER:
+
+;===================================================================================================
+; Function........:  CreateGUI()
+;
+; Description.....:  Creates the main GUI.
+;===================================================================================================
+; Function........:  CreateGroupBox($Title, $TextWidth, $TextHeight, $TextColour,
+;						$TextStyle, $x, $y, $w, $h, $BorderColour)
+;
+; Description.....:  Creates a box with a title around a certain area. Similar to
+;						GUICtrlCreateGroup with $SS_SUNKEN but without glitched backgroundcolour.
+;
+; Parameter(s)....:  $Title			- A string which will be in the middle on the top of the group.
+;										Should start and end with a space: " text "
+;					 $TextWidth 	- Width of the text. Used to calculate the box. Either use
+;										something like GetTextExtent or find the best value
+;										by trial and error.
+;					 $TextHeight	- Height of the text. Used to get the font height.
+;					 $TextColour	- Colour of the text (24 bit RGB).
+;					 $TextStyle		- Defines the textstyle as in GUICtrlSetFont.
+;					 $x				- Left side of the box.
+;					 $y				- Top side of the box.
+;					 $w				- Width of the box.
+;					 $h				- Height of the box.
+;					 $BorderColour	- Colour of the border.
+;===================================================================================================
+; Function........:  CreateBitmapFromIcon($BackgroundColour, $FilePath, $IconIndex, $Size)
+;
+; Description.....:  Creates a bitmap from an icon (eg. from the Shell32.dll) which can be used for
+;						various things like popmenus or listviews.
+;
+; Parameter(s)....:  $BackgroundColour	- Backgroundcolour of the bitmap. Should be set to
+;											_WinAPI_GetSysColor($COLOR_MENU) most of the times.
+;					 $FilePath			- Path to the file containing the icon.
+;					 $IconIndex			- Index of the icon within the file.
+;					 $Size				- Width/Length of the bitmap. Can only be a square.
+;
+; Return Value(s).:  On Success - A handle to the bitmap.
+;                    On Failure - 0.
+;===================================================================================================
+; Function........:  DllList_PopUp($hwnd)
+;
+; Description.....:  Creates and manages the popup menu (rightclick) in the dll list.
+;
+; Parameter(s)....:  $hwnd	- A handle to the parent control.
+;===================================================================================================
+; Function........:  UpdateLV($hListView, $ActionID, $Mode = $M_All, $Index = -1)
+;
+; Description.....:  Updates the items of the specified listview according to the ActionId and Mode.
+;
+; Parameter(s)....:  $hListView		- A handle to the listview control.
+;					 $ActionID		- Identifier of the action to perform (check $A_ID_... values).
+;					 $Mode			- Either all, selected indices or one index can be changed.
+;					 $Index			- 0-based index of the item to change. Only used when
+;										$Mode is $M_Index.
+;===================================================================================================
+; Function........:  GUI_LV_SubclassProc($hWnd, $uMsg, $wParam, $lParam)
+;
+; Description.....:  A subclass procedure to filter messages to the listview. This allows using
+;						'DELETE' to delete one or multiple dlls from the list. This is a much
+;                       cleaner method than using GuiCtrlCreateDummy and GUISetAccelerators.
+;
+; Parameter(s)....:  normal SubClassProc arguments
+;
+; Return Value(s).:  Forwards the call to DefSubclassProc.
+;===================================================================================================
+; Function........:  GUI_GUI_WM_NOTIFY($hWnd, $uMsg, $wParam, $lParam)
+;
+; Description.....:  WM_NOTIFY wndProc of the main GUI. Catches various messages
+;						sent to the dll list (rightclick, doubleclick...)
+;
+; Parameter(s)....:  normal wndProc arguments
+;
+; Return Value(s).:  Forwards calls to windows handler and returns $GUI_RUNDEFMSG.
+;===================================================================================================
+; Function........:  WM_NOTIFY($hWnd, $uMsg, $wParam, $lParam)
+;
+; Description.....:  Main WM_NOTIFY wndProc. Forwards the call to the WM_NOTIFY proc of the
+;						main GUI or the	ProcessPicker depending on the current state.
+;
+; Parameter(s)....:  normal wndProc arguments
+;
+; Return Value(s).:  Forwards calls to WM_NOTIFY routines and returns their return values.
+;===================================================================================================
+; Function........:  WM_DROPFILES($hWnd, $uMsg, $wParam, $lParam)
+;
+; Description.....:  Handles dropped files to the dll list.
+;
+; Parameter(s)....:  normal wndProc arguments
+;
+; Return Value(s).:  Forwards calls to windows handler and returns $GUI_RUNDEFMSG.
+;===================================================================================================
+; Function........:  WM_COMMAND($hwnd, $uMsg, $wParam, $lParam)
+;
+; Description.....:  Handles changes to the text input fields.
+;
+; Parameter(s)....:  normal wndProc arguments
+;
+; Return Value(s).:  Forwards calls to windows handler and returns $GUI_RUNDEFMSG.
+; Function........:  ResetGUI()
+;
+; Description.....:  Resets the GUI settings according to the g_ variables.
+;						This doesn't include the dll list.
+;===================================================================================================
+; Function........:  ResetGUI()
+;
+; Description.....:  Resets the settings tab of the GUI to default settings.
+;===================================================================================================
+; Function........:  CloseGUI()
+;
+; Description.....:  Closes the GUI(s) and does some clean up.
+;===================================================================================================
+; Function........:  CheckBanner()
+;
+; Description.....:  Handles cursor change, tooltip and clicks to the GH Banner.
+;===================================================================================================
+; Function........:  AddFile($Path, $UpdateLastDirectory = False)
+;
+; Description.....:  Adds a single file to the dll list after verifying that the file is a valid
+;						PE file and isn't already in the list.
+;
+; Parameter(s)....:  $Path					- Absolute path to the file.
+;					 $UpdateLastDirectory	- Updates the last directory if set to True.
+;===================================================================================================
+; Function........:  AddFiles($Path = "")
+;
+; Description.....:  Opens a file dialog at the specified path or g_LastDirectory. Files selected
+;						in the dialog will be added to the list (if valid).
+;
+; Parameter(s)....:  $Path 		- Path to the directory. If empty $g_LastDirectory will be used.
+;===================================================================================================
+; Function........:  UpdateProcessIcon($TargetPID)
+;
+; Description.....:  Updates the process icon and g_ExePath in the top left corner when
+;						another process has been selected.
+;
+; Parameter(s)....:  $TargetPID - The process identifier of the new process.
+;===================================================================================================
+; Function........:  UpdateTargetProcess()
+;
+; Description.....:  Updates the global variables according to the current GUI settings (eg. after
+; 						the ProcessPicker was used).
+;===================================================================================================
+; Function........:  UpdateGUI()
+;
+; Description.....:  Main GUI function which handles all events and updates the GUI accordingly.
+;
+; Return Value(s).:  $GUI_RETURN 	- Default return value.
+;                    $GUI_EXIT 		- User closed the GUI (mainloop in Main.au3 will stop).
+;					 $GUI_INJECT	- Injection event.
+;					 $GUI_UPDATE	- User wants to update the injector.
+;					 $GUI_RESET		- GUI gets reseted.
+;===================================================================================================
+
+
 #include "ProcessList.au3"
 #include "Settings.au3"
+
+#Region Global Definitions
 
 Global Const $GUI_EXIT  	= 0
 Global Const $GUI_RETURN 	= 1
@@ -7,9 +165,12 @@ Global Const $GUI_RESET 	= 2
 Global Const $GUI_INJECT	= 3
 Global Const $GUI_UPDATE	= 4
 
+Global Const $VK_DELETE = 0x2E
+
 $h_GUI 				= 0
+
 $h_P_Banner 		= 0
-$h_G_Settings 		= 0
+;Settings
 $h_L_ProcName 		= 0
 $h_I_ProcName 		= 0
 $h_L_PID 			= 0
@@ -23,34 +184,45 @@ $h_G_InjDelay 		= 0
 $h_I_InjDelay 		= 0
 $h_C_CloseAI 		= 0
 $h_C_AutoI 			= 0
-$h_G_Method 		= 0
-$h_R_LoadLib 		= 0
-$h_R_LdrDll 		= 0
-$h_R_MMap 			= 0
+;;Injection method
+$h_C_Method			= 0
+$h_C_HijackHandle	= 0
+	$h_L_HijackHandle 	= 0
 $h_C_LaunchMethod	= 0
 $h_C_HTFD			= 0
-$h_G_PostInj 		= 0
+	$h_L_HTFD			= 0
+;;Cloaking
 $h_C_Header 		= 0
 $h_C_Shift			= 0
+	$h_L_Shift			= 0
 $h_C_Unlink 		= 0
+	$h_L_Unlink 		= 0
 $h_C_Clean			= 0
+	$h_L_Clean			= 0
+$h_C_RandomizeName  = 0
+$h_C_LoadCopy		= 0
+;Settings
 $h_B_Reset 			= 0
-$h_G_DllList 		= 0
+
+;Files
 $h_L_Dlls 			= 0
 $h_B_Add 			= 0
 $h_B_Inject 		= 0
 $h_B_Remove 		= 0
-$h_G_Info 			= 0
+
+;Info
 $h_L_Version 		= 0
 $h_B_Help 			= 0
 $h_B_Changelog 		= 0
-$h_B_Broihon 		= 0
+$h_B_ToggleTips		= 0
+
+$h_T_TooltipCtrl	= 0
 
 $l_GUIWidth 	= 800
-$l_GUIHeight	= 425
+$l_GUIHeight	= 440
 $l_BannerHeight = 66
 
-$l_WindowTitle 	= "Guided Hacking - Injector"
+$l_WindowTitle 	= "Guided Hacking - Injector V" & $g_CurrentVersion
 
 $l_bBanner = Binary( _
 		"0xFFD8FFE000104A46494600010101004800480000FFFE00134372656174656420776974682047494D50FFDB0043000302020302020303030304030304050805050404050A070706080C0A0C0C0B0A0B0B0D0E12100D0E110E0B0B1016101113141515150C0F171816141812141514FFDB00430103040405040509050509140D0B0D1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414FFC20011080042032003011100021101031101FFC4001B00010002030101000000000000000000000004050103060207FFC40014010100000000000000000000000000000000FFDA000C03010002100310000001F8A1AC03D1B0D200000000320C000C806019060000000006C358001ECB12B8F00000006C35800000C962443400003D1B0D20006D3C9E00064C000C9836035992C4D46A241E4825815E002C0AF271E8C007A2B8DA5911C1A0D05C9101E8846B3A639900E88A43403E8871A568075C6A2ACB33D1CB9D21CC82D4B63943A6324D38B001D31CC9D1128A92713CE48D20C9626A351BCD644251B8D07A3710CD47A2E0A500986D2B8D80D65915A0024182515C002C4AE27820007A27110DA4500C930840164569D39CC00748511A09C59134E481D59CE11C03264E94E60E84C9CE83A83C1089673801D3908C14C0193A739705915A0006D24108005895C4D3615C013C100D80F04E2000002C4AE001625713C100004F229B88A0C19261080369B4ECCA400BF385341D69C91D39CF1A4EACE50000F474A4C288A900EA0F050170682A01D39B0E500000324D2080013C800006D369B48649219E8967A201B01E496420483683C1BCAE001625713C100004E23160470683513084019261D01CD807447366B3E9273664B03863A93960003D1F513903073801D41E0A0349D5140443A73D9CA8379D00361CB992410C0009E4000004E32402C0AF279009E4036035960578001620AE001625713C100004F229B48A01926108026118E90E6003A4288E90E5CF00EB4E48EB8E44000F474A7305C134E681D41E0A03483B438D3A5369CA18001D69C9982C4AE00026914F000261189840269149A57928D4601AC960880164403D1B8880C9605713C1000271A4F06D228064984204837104E9CE6003A4288E98E480249765716A72E017C519D29CC02D4B33973A83C1406907B3AF221CE1D91C51805C924E7412CC114025114B42B4F20DC482192C840B72011C13C880D60906F30648479048379804106F3D1B819221A8F4589AC1A0D0599A81A88A0B42AC02C8D26484002D8A92717C793D140432CCAB00B423124C15E78009A5A1CF1B0EA4D67A2B0A725822120DE60F4413C82798326B221B8D67905895C0120D60D60000000000000000000000000000000000000000000000000000000000000000000000000D87FFC4002F100001030203060603010101010000000003010204000510203306111213143422232431323515162130254060FFDA000801010001050226A628D57572489FEBBB3EEADDFF0085A373F3318E22FE2A6EE7B1C35FF1631C477F87BD32DB2C8850100B99AD575724899904F75398E665F6CBED80F509A9489BD78071A9D30AB4920A95D62BE8A04E0A849BDD9009E96A5FCE0AF09BAF915D71EBAB575721864A16A489A769FAF915D7C8A2C821A93DE54C332475F22BAD25272645106E13AAEC9BA163B3A9BEF86D6C2CF20765837186B6F9B88EDD1EDC126D14ADDF959BC4CDA294A87811A681BEFB489BAF385BEDA5B91664F8F163D5CD375B7665786FF75032E43C97F4DD26A05ADA50BAFBD353EEF388A1DA29E2468A15EE8C17C72E088AE5E11C5A74C2AD2482A5756AFA28511B410736BA868A96495D4D9666D710A45106E13A9A9C4EB8EE22E31588E34F5E39143D426A50FD303200CA0799188485F2C80ED6A67CE1EA62D72B54FB8A316ACAEE714F79BDDE2C5EA45576EC71D9CFBD3EB5428AE9D2EF929B2674EFFA168C2CE21C60C8904946C8DF96D2FDD55BED5D48EE175E78B0BA7D66CD7DEC69C4B74FBAC11B1B8ED0773698293E65D2E2B703E49930573B760CF4C0CA21A9492488AB907EA4550D3D4C75E6E44F2A21BC51E87A84D4A9ABE76685F2C80ED6A67CE1EA648BE2A16A4AEE7756EC13DE6F77889FCB24967048996A993ADBFAEDCEBF5DB9D7EBB73AB0D8AE00BC1F5AAD9E82DD5612B564184E016AEDE45BF2B7E5B4BF7516CC9121DC2E45B8931BA7D66CD7DE9B5AD570488EB9DBD6DE7C3683B98DE9B67B3A26F598BE7E58DE06651BF96492CE0911FC2363D46F94C469A9ADE274B779ACF143A1EA1351BFC74DEEB0185489D23ABA4751233C6C85F2C80ED6A67CE1EA6487AC2D4932CC923AC357586A215E5A4F79BDDE499DCDD0AF640EA4B5D496BA92D6CE9C8B7C3EB318A47DE2CB2387F5C9749B3D311769E1BDAEABF7F572B7E57B5896AB9C7BEC86CAB8DB1A21E374FACD9AFBD36B55B250E482545242915B41DCAF8B66300056417F5E915FAF48A66CD4B2BDCD56398BB9F33BACA2ED734D5DF27E30AB562544F0AD44FEAD0F509A9523CC1E591E5060EA640FF21D4CF9C3D4C8CF2A30B5257738A7BCDEEF18ACE22BDDC6FBB7638ECE7DE9F5AC2C40BDEF523F0B3FAD8B4A9F91B0656FCB697EEAADB727DB8B71B68D0585D3EB366BEF4DAD84754BF447355ABB41DCD93D585515AB92C4DE953DF093E6332C572731EC51BF24567115EEE37C9F08EA23910AE6AB1C5F2A35457F0482B78083D426A500DCBA34751641B123239CAF7088A22481703B044E2591E50AA67CE1EA6228FE13179AE16ACAEE714F79BDDE0103CEA5235ACABB7638" & _
@@ -60,35 +232,77 @@ $l_bBanner = Binary( _
 		"484087E65E68158936897789A395A2823D9A0920B1DD73E1A59426DB81F5348EC05B71A21E05E623B3276E01BC1119AB141164CD92E2779562990A4E005707B2D4AF65AB46EE0A7CD20C910B3A373EF896794235E16BDEBF6BDEBF680C40B3C898B3B7040C393D0E8E1EBB4D7B6D5461C9792239D28F53A2869D00C04B8B1806461398AF80FBAF6F639108BAA055B3866A9A807EA91DB642AE340D7ADFED7ADFED7ADFED062096897B22D7A8D544A948951803BB515975B69544485E61C204FE6A4012E351680A13E6240D99CD4D3B819A984917939BE0FEE9620303DF7BCC184E948945726540CF990B2D51513B5FDE03032C030E5C1E9746BDE6AE07698BB2F82BD3065672A774FB70744CD108988D3870699F1624CAE8F1A0281B97740375E33264E9D86FD009AD122052A49186F9E1458114EC94F344914E8B27DF3452489BA087ECE60805D58288310973708FD536CD4F5FF4706B692D727C7DB8011BE933B4F967B52912532AEB57CE02138D8D0C2BD96A57B2D5E0B7DC30E4E05EB07B3C62A2A36A99AC64F4649D01E6946922139CD3EA8C392E42E44E72FA1C3D769AF6DAA8C39348E3CD90F42C1DEBDCE8AF7DAB93E03EEBDBD8E4396C6661180EEC14FB4F521679717B0DEBD46AA0ED12B6EF4C786AA5AE8C512AF76A2A28900EF5329FE80522410308E4D60046AF023B4C3A079BE0FEF8F1821FFA4310C9D05C6E50B8FDC959665D91BF260F4BA35EF35717D021108257CCAEDC7B293F00D80591327834270952B5DEADBAC9481C87428611E3151529C9964A6B88574A294A255CDE18D0020C9C5FAC1F3CCDC0F36198ED0A744CBB24E509642561180EAB077AC78A9DD9AD16C04E63E91C244C4D38191ECC3440C993A8C55B564DF86C3C4BDF80348370CD67E1A5C7DE15AF65A95ECB5783EE88F89A6D28A5FE743F43C71633A196C733323C8699D34B49F9AD5F54B1D4CCEF443170B02717A261C5EF8C14AB4229D524990763E5787AED35EDB55187153564286D0CDDF028D20EC18703AEAD7B1D15EFB5727C07DD7B7B1C6C92657035C028EAC6CF08FD0C8EFCD8BD86F5EA3556506098FD6DB1ABE46AE156A4F8A27853C1F665DA29697B9C5C0F44F0C34928A05D7135E1D04DF9241F00572168BAB09BD7C3FDF27167973A4BFF0001C46E53723D094F2BE82637E383D2E8D7BCD5C4F3E52813223923407E2C1436099E0033DDC1A35CE3216911EB563E6B130B8E6712B8DCA41CEA210C4470E3DD2C1FABE009569D45D8C3EC7D8B1A0719D90188230DA51855DDD968E8EA3C4150095C0296028A1EA309E1299AB380B0274E1BD26A381C23D38E18025EC5AAC0286C56CD11E11B32F34074809BAC5131942FCD89F8E02A1184B8D60EC742DD3D8F2A0352EC4D8780E0220C232344F8017709F99AF65A95ECB578C13B68626E59A53237FE1763CD125749F612FD5763A88F4901D8A490F2B95789ACE4F561193B945F29C490EC09F9A04339480BDEF50074A929B2FA052AAAB2B75783BD819333089A7D353DD10B30EB5FC8561DA6DC56E863013DC3F0AC9D98BC0D0323A70B31631D619A94D0C084ACB5FE62BFCC5438C37004F08ACC8846A42AECE13B15FE52AB284B6087612A5CED200F663D5E3E47156C916CB1B724FD1689394E54F0862E755ACF0C29F4B606C56C6C101D39755206E18C5C402F6675E0240923B85593444A441CE01EE6A8EFE717D3F7A3266532E849E8A01E885B650AC1A005590990C54430A73DF241A720C66651DB22BE312B0C27253888124CC6D59EADDFC591168B2B02F2D2B3698631ADF461312AC725D9F84928B0F30911C46A149C332303AD86DC0B971E9D8225C6A17D8928762A6ECEF5081EDD8A363F2D29896393B89E86AC70EDFE085DD2EFC2F43B6436F06135723D925B69318E0A90C0975AAD4C83B813E2B1E6825767F612FD50E9B191D148EC29C63CAE55DDE02888C25C4A29B72283617F33483106140EF6A2387E53BDC0AF9A82E8C923FB2EABC1B7048B1317C6B115AE7559E20D19BB63CACA2DC49A482598C93C4C57B2D4AF65ABFF00D1FB2D4AFFD9" _
 	)
 
+$l_bLulIcon = Binary( _
+		 "0x0000010001001C1C000001002000D80C000016000000280000001C000000380000000100200000000000400C0000130B0000130B000000000000000000000000000000000000000000007E9AC500566D950095B9DBF4B7DDFEFFC8E9FBFFD4F3FDFFCAEFFDFFC5EEFEFFCBF6FFFF94B4D599121E330A2B3B4E0019202D002F3B4D00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000095B7E7006F86B419A4C9EDFFC8ECFFFFD5F8FDFFD5F8FEFFCEF2FEFFCCF1FFFFCEF6FFFF708BB0FF4F6387FF4F6282E950617F955465852758668300485A7C007388A400000000000000000000000000000000000000000000000000000000000000000000000000000000007188C10012174D007E9CCB94BEE1FCFFE0FFFFFFDCFDFFFFD4F7FEFFCCF2FDFFCCF3FFFFC8ECFFFF556996FF6B83B1FF667DA4FF516685FF536681FF4F617ED06C7FA425635282006D769E0000000000000000000000000000000000000000000000000000000000000000006E97CF004B6D9B007D9ECC76B3D7FAFFD8FDFFFFDBFDFEFFDCFCFEFFD5F8FEFFD1F9FEFFD2F6FFFFCDEDFFFF99B2E6FF617BA4FF657FA5FF516B89FF49627DFF3E546EFF5E779DFD8BA1D326BBE0FF0047495D00000000000000000000000000000000000000000000000000000000009BC5FF007397CB749ABCE7FFD4F9FFFFDCFFFFFFDBFEFFFFDBFAFFFFD6F9FFFFD9FCFFFFDBFCFFFF92B0CBFF172D48FF10283DFF5A7096FF61799DFF667EA1FF627997FF5B7292FF5C7098EF04060B31CAFAFF0000000000000000000000000000000000000000000000000000000000B8E1FF008CACD419B1D8F2F1AED6F5FFC3ECFCFFDEFFFEFFDBFCFEFFD6F8FEFFDCFCFEFFD6F8FFFF9BBAE2FF496082FF2A405CFF65799FFF829AC6FF839BC8FF8BA5CDFF8298BCFF253551FF000000ED000000000000000000000000000000000000000000000000000000000000000093A2A80096C8FF007D9FCF29A0CAF8FFC5EDFFFFD3F7FFFFDDFEFFFFDCFCFDFFD3F7FFFFC3E8FCFFAECFFBFFA7CBF3FF7291BFFF7B95C3FF95AFDBFF829CC6FF7D97C0FF94ACD5FF405477FF485685FF8A97C73E8197B3007881CA00000000000000000000000000000000000000000000000000B6D7F800879FBF00BDE2FA3DC0E6FFFFDFFFFFFFC4E4FBFFBADEF8FFDDFFFFFFB2D0F5FF98AFECFFB5D8FFFF94BBEAFF85A1D1FF8FABD2FF8EAAD5FF859EC9FF91A7D1FF7387B2FFAFCAF8FFC9E5FFF49AA7D917B4CDFF00A5B5C4000000000000000000000000000000000000000000000000001627400000001200425C74D48DB0CEFF9EC3F9FFCDF2FFFFE1FFFFFFC4E3FFFFBFD0FFFFA1B1E9FF93B3E3FF87AEDDFF93B0D8FF8BA6D2FF8AA3D0FF90A6D2FF859AC5FF839ACBFFA4B9F4FFACC1F6DB9BA7D600BDCFFF00000000000000000000000000000000000000000000000000172E440006172600172E45FC425F83FF93B9EBFFAED3FAFFB1D4FBFF6B7DAFFF262C5EFF040732FF324877FF537BAAFF8EACDBFF8AA0CFFF859DD0FF869CCBFF90A4CFFF6679AAFF5A6BB0FFA9BFFBFF8B9CDA4FA4B9FF00B6C7FF000000000000000000000000000000000000000000263F58000A1B2D00465F83F86381AEFF7DA1D7FF5D77B5FF364380FF00002DFF182137FF6990AFFF375A8DFF436692FF92ACE0FF9FB4E4FF91A6DAFF7F96CAFF8299CCFF697FA8FF6979AAFF626FADFF505CA57D2B37A9006A7BAE0000000000000000000000000000000000000000003C4F6D00000000006E88AE9B80A2CEFF78A0D2FF4E66A5FF25345FFF9AB9C1FFC6EDFFFF82A4DFFF587BAFFF698CBFFFA2BEF3FFB0C9F8FFA1B9E8FF94ACDCFF7F99CFFF6F86B0FF4D5D7EFF5D709DFF283850D0000000000713170000000000000000000000000000000000000000000000000098C4F5006C8BAF4C81A3CDFF7DA3D3FF365386FF5878A9FFA2CAFBFF7E9EDEFF5673A9FF8DA8D4FF98B6ECFFB8D4FCFFCEE7FFFFBDD4FBFFA8C1F3FF91B0E5FF8CA5D7FF41546BFF3A4F62FF112128FF00090C81090B06000D171B00000000000000000000000000000000000000000082A1CF006A84A9107897C2FF7C9DCFFF2F527BFF2C497AFF4B69A2FF507197FF1E3659FF5F73A8FF90ADEBFFC6DFFEFFDCF6FFFFD0E6FFFFB5D3FEFFA4C8F6FF9FBEEFFF7489B2FF36485CFF0C1C26FF0D1920FF172127201C282D0000000000000000000000000000000000000000006A84AC004F5E75006D89B6BB7892C7FF688ABEFF466C9AFF2F4F7AFF374C7CFF2A345FFF687FBAFF99B8EFFFC3E0FFFFB2D6FDFFA5CAF2FF8BB4E2FF96BDEDFFABC8F7FF94ABDAFF465872FF132530FF192A31FF1D282E672738420012191D00000000000000000000000000000000004B546E008FBAF5006884AD437C9DD0FF99B4ECFF8AA7E7FF5D79BAFF849ED4FFB5D2FFFFB3D0FFFFB8D8FFFF99BCE7FF5B7DB3FF456895FF7093C5FF809DCFFFAAC5F5FFA5BCEDFF7386ACFF293D4EFF192C34FF212B348747798A0016161D000000000000000000000000000000000000000000728EBA004F678C007E9FD4EAA5C5F9FFB8D5FEFF98B7EFFFAECDFCFFD0EBFFFFB4D0FFFF98BCF1FF496BA0FF5B7CACFF9EBDEDFF778EBAFF839BCAFFAEC8F6FFADC7F5FF97ADDBFF40556CFF1B2E37FF29323C9400729300302D350000000000000000000000000000000000000000004B5B8400FFFFFF007F9CD37FB1D2FFFFD2F0FFFFC7E6FFFF9CC4F4FF9BC0EAFFC4DFFFFF97B6EEFF587DBAFF799" & _
+		 "7CAFF7389B1FF7283A8FFB4D0F6FFB0CAF7FFADC6F3FFABC3F5FF4A5F7AFF213440FF27343E812C4F6600292C3400000000000000000000000000000000000000000000000000A6C8FF007992C100B5D6FACEC2E8FFFF759CC9FF446698FF436898FF99BAE7FFB7D6FFFF6077A5FF2C3B58FF6C809CFFC5DEF6FFC6E5FFFFAFCBF7FFAFC9F7FFB1C9FBFF4D6282FF1C2F3DFF2F3E4B563A4E5D001821280000000000000000000000000000000000000000000000000069758700A3D0FF008EACD0036D95C5EF3C5E8FFF698ABFFF5B7CACFF6986B4FFBCD9FFFFBBD5F9FFC0D8F6FFD6F0FFFFD4EEFFFFC9E5FDFFB8D5FAFFABC6F8FFAECAFDFF596E91FF1B2D3BFF293844193242510000000000000000000000000000000000000000000000000000000000000000003841570088BDFF0059759E586587B8FF617EADFF293A53FF7F98BFFFC3E1FFFFCBE7FFFFCAE6FFFFCBE6FEFFCEE7FDFFC8E2FAFFB8D5F8FFABC8F8FFADC8FDFF52678BFF20303DFE152029001B2936000000000000000000000000000000000000000000000000000000000000000000000000003E526C001F2A3C00506687C5657D9EFF98B4D6FFBEE0FFFFBFE2FFFFC3E3FBFFBFDDFAFFC1DEFAFFCCE7FBFFC6E2FAFFAECBFBFFACC8FFFFA6BDF6FF3A4C69FF1C2C37FF212B34042A3741000000000000000000000000000000000000000000000000000000000000000000000000001A273A00A2C5F500617AA019AAD0FCFEC2ECFFFFBFE3FFFFBBE0FAFFBEDFFBFFBBDEFAFFBDDDFAFFBCDAFAFFB4D3FBFFB1CEFFFFB4CEFFFF64769FFF142331FF1F2F39EA20292E0027343F000000000000000000000000000000000000000000000000000000000000000000000000000000000028436A00FFFFFF0086A9DF35B2D8FFFFBBDDFFFFBFE2FAFFC5E9FBFFC1E5FBFFBBDFFDFFBBDCFFFFBFDAFFFFB3CEFFFF6A80AEFF14212EFF1C2834EC1F2D374D0000000017252E00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000089ACDD0000000000AACCF827B5D7FFE0C7E6FFFFDEFFFFFFF2FFFFFFDBFFFFFFCDEEFFFFADC6FFFF536891FF111F2EFF131D28BF20252F0023293B002A2D350000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000626F9000FFFFFF00B4CEFF00C8E7FF57DBFFFF95ADC8E1F692ADCEFF6F86AAFF2A3D59FF0D1928FF182732FF1E2A363A2838470008161C000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000B320000063F0000000C8D000918FF0F1F2DFF1B2936FF121E29FF121D28A9121E260016252E00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001C2C38000C131C0018273694152633FC0F1926DC101823630C0D15000F141E000000000000000000000000000000000000000000F803FFF0F0007FF0F0001FF0E0000FF0C00007F0C00007F0E00003F0F00001F0F80001F0F80000F0F80000F0F80000F0F8000070F8000030FC000030FC000030FE000030FE000030FF000030FF000030FF800070FFC00030FFC00070FFE00070FFF001F0FFFC01F0FFFF03F0FFFF87F0" _
+    )
+
 $l_BannerPath 		= @TempDir & "\GH Banner.jpg"
 $l_HoverBanner 		= False
 $l_HoverBannerPrev	= False
+
+$l_IconPath			= @TempDir & "\lul.ico"
 
 $l_HoverProcIcon 		= False
 $l_HoverProcIconPrev 	= False
 $g_ExePath				= "No process selected."
 
 Global $DropFileBuffer 			= 0
-Global $g_DllList_SortSense[4] 	= [False, False, False, False]
+Global $g_DllList_SortSense[5] 	= [False, False, False, False, False]
 $l_IgnoreInputChange 			= False
+$l_ChangedFont					= False
 $l_ProcIconIndex				= 0
 $l_DoubleClickedDll				= -1
 $l_UpdateProcess				= True
 $l_ProcessDead					= False
 $l_ProcessPickerActive			= False
 
+$h_GUI_LV_SubclassProc 	= 0
+$ph_GUI_LV_SubclassProc = 0
+$h_D_SelAll = 0
+
+Global Const $A_ID_Unused		= 0
+Global Const $A_ID_Toggle 		= 1
+Global Const $A_ID_Activate 	= 2
+Global Const $A_ID_Deactivate 	= 3
+Global Const $A_ID_Open 		= 4
+Global Const $A_ID_SelectAll	= 5
+Global Const $A_ID_Delete 		= 6
+
+Global Const $M_Index		= 0
+Global Const $M_Selected	= 1
+Global Const $M_All			= 2
+
+Global $h_bitmap_buffer[7] = [0, 0, 0, 0, 0, 0, 0]
+
+Global $g_PopUpMenu_0_Names[5] 	= ["Toggle", "Activate", "Deactivate", "Open", "Delete"]
+Global $g_PopUpMenu_0_AIDs[5]	= [$A_ID_Toggle, $A_ID_Activate, $A_ID_Deactivate, $A_ID_Open, $A_ID_Delete]
+
+Global $g_PopUpMenu_1_Names[5] 	= ["Toggle all", "Activate all", "Deactivate all", "Select all", "Delete all"]
+Global $g_PopUpMenu_1_AIDs[5]	= [$A_ID_Toggle, $A_ID_Activate, $A_ID_Deactivate, $A_ID_SelectAll, $A_ID_Delete]
+
+#EndRegion
+
 Func CreateGUI()
 
 	FileDelete($l_BannerPath)
 	FileWrite($l_BannerPath, $l_bBanner)
 
+	FileDelete($l_IconPath)
+	FileWrite($l_IconPath, $l_bLulIcon)
+
 	$h_GUI = GUICreate($l_WindowTitle, $l_GUIWidth, $l_GUIHeight, 100, 100, Default, $WS_EX_ACCEPTFILES)
+	If IsAdmin() Then
+		_WinAPI_ChangeWindowMessageFilterEx($h_GUI, $WM_DROPFILES, $MSGFLT_ALLOW)
+		_WinAPI_ChangeWindowMessageFilterEx($h_GUI, $WM_COPYGLOBALDATA, $MSGFLT_ALLOW)
+    EndIf
+
+	$h_D_SelAll = GUICtrlCreateDummy()
 
 	$h_P_Banner = GUICtrlCreatePic($l_BannerPath, 0, 0, $l_GUIWidth, $l_BannerHeight)
 		GUICtrlSetCursor($h_P_Banner, 0)
 
-	$h_G_Settings = GUICtrlCreateGroup("Settings", 10, 80, $l_GUIWidth / 3 - 15, $l_GUIHeight - 95, $SS_SUNKEN)
-		GUICtrlSetFont($h_G_Settings, 11, 700)
+	CreateGroupBox(" Settings ", 70, 25, 0, $FW_BOLD, 10, 80, $l_GUIWidth / 3 - 15, $l_GUIHeight - 95, 0xB0B0B0)
 
 		$h_L_ProcName = GUICtrlCreateLabel("Process:", 20, 105, 45, 20)
 		$h_I_ProcName = GUICtrlCreateInput($g_Processname, 85, 102, $l_GUIWidth / 3 - 100, 20)
@@ -108,10 +322,6 @@ Func CreateGUI()
 			GUICtrlSetState($h_I_ProcName, $GUI_DISABLE)
 		EndIf
 
-		$h_P_ProcIcon = _GUIImageList_Create(21, 20, 5, 1)
-		_GUIImageList_AddIcon($h_P_ProcIcon, @SystemDir & "\shell32.dll", 131)
-		_GUIImageList_AddIcon($h_P_ProcIcon, @SystemDir & "\imageres.dll", 11)
-
 		$h_B_SelProcess = GUICtrlCreateButton("Select process", 155, 131, $l_GUIWidth / 3 - 170, 22)
 
 		$h_G_InjDelay = GUICtrlCreateLabel("Delay:", 20, 165, 35, 20)
@@ -127,36 +337,38 @@ Func CreateGUI()
 			GUICtrlSetState($h_C_AutoI, $GUI_CHECKED)
 		EndIf
 
-		$h_G_Method = GUICtrlCreateGroup("Injection method", 15, 215, $l_GUIWidth / 3 - 25, 75, $SS_SUNKEN)
-			GUICtrlSetFont($h_G_Method, 9, $FW_BOLD)
+		CreateGroupBox(" Injection method ", 100, 19, 0, $FW_BOLD, 15, 215, $l_GUIWidth / 3 - 25, 70, 0xB0B0B0)
 
 			GUIStartGroup()
-				$h_R_LoadLib 	= GUICtrlCreateRadio("LoadLibraryA", 20, 235)
-				$h_R_LdrDll 	= GUICtrlCreateRadio("LdrLoadDll", 102, 235)
-				$h_R_MMap 		= GUICtrlCreateRadio("Manual Map", 175, 235)
-				If NOT ($g_InjectionMethod) Then
-					GUICtrlSetState($h_R_LoadLib, $GUI_CHECKED)
-				ElseIf ($g_InjectionMethod = 1) Then
-					GUICtrlSetState($h_R_LdrDll, $GUI_CHECKED)
-				ElseIf ($g_InjectionMethod = 2) Then
-					GUICtrlSetState($h_R_MMap, $GUI_CHECKED)
-				EndIf
+				$h_C_Method		= GUICtrlCreateCombo("", 20, 230, 121, -1, $CBS_DROPDOWNLIST)
+					GUICtrlSetData($h_C_Method, "LoadLibraryA|LdrLodDll|ManualMap", "LoadLibraryA")
+					_GUICtrlComboBox_SetCurSel($h_C_Method, $g_InjectionMethod)
 
-				$h_C_LaunchMethod = GUICtrlCreateCombo("", 20, 260, 121, -1, $CBS_DROPDOWNLIST)
+				$h_L_HijackHandle = GUICtrlCreateLabel("", 144, 230, 110, 20)
+				$h_C_HijackHandle = GUICtrlCreateCheckbox("Hijack handle", 144, 230, 110, 20)
+					GUICtrlSetState($h_C_HijackHandle, $GUI_DISABLE)
+				;If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+					;GUICtrlSetState($h_C_HijackHandle, $GUI_CHECKED)
+				;EndIf
+
+				$h_C_LaunchMethod = GUICtrlCreateCombo("", 20, 255, 121, -1, $CBS_DROPDOWNLIST)
 					GUICtrlSetData($h_C_LaunchMethod, "NtCreateThreadEx|Thread Hijacking|SetWindowsHookEx|QueueUserAPC", "NtCreateThreadEx")
 					_GUICtrlComboBox_SetCurSel($h_C_LaunchMethod, $g_LaunchMethod)
-				$h_C_HTFD = GUICtrlCreateCheckbox("Hide from debugger", 144, 260, 110)
+
+					$h_L_HTFD = GUICtrlCreateLabel("", 144, 255, 110, 20)
+						GUICtrlSetState($h_L_HTFD, $GUI_DISABLE)
+				$h_C_HTFD = GUICtrlCreateCheckbox("Hide from debugger", 144, 255, 110, 20)
 				If ($g_LaunchMethod <> 0) Then
-					GuICtrlSetState($h_C_HTFD, $GUI_DISABLE)
+					GUICtrlSetState($h_C_HTFD, $GUI_DISABLE)
+					GUICtrlSetState($h_L_HTFD, $GUI_ENABLE)
 				ElseIf (BitAND($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)) Then
 					GUICtrlSetState($h_C_HTFD, $GUI_CHECKED)
 				EndIf
 
-		$h_G_PostInj = GUICtrlCreateGroup("Post injection", 15, 295, $l_GUIWidth / 3 - 25, 80, $SS_SUNKEN)
-			GUICtrlSetFont($h_G_PostInj, 9, $FW_BOLD)
+		CreateGroupBox(" Cloaking ", 54, 19, 0, $FW_BOLD, 15, 295, $l_GUIWidth / 3 - 25, 95, 0xB0B0B0)
 
 			GUIStartGroup()
-				$h_C_Header = GUICtrlCreateCombo("", 20, 320, 93, -1, $CBS_DROPDOWNLIST)
+				$h_C_Header = GUICtrlCreateCombo("", 20, 310, 93, -1, $CBS_DROPDOWNLIST)
 					GUICtrlSetData($h_C_Header, "Keep PEH|Erase PEH|Fake PEH", "Keep PEH")
 				If (BitAND($g_InjectionFlags, $INJ_ERASE_HEADER)) Then
 					_GUICtrlComboBox_SetCurSel($h_C_Header, 1)
@@ -164,19 +376,28 @@ Func CreateGUI()
 					_GUICtrlComboBox_SetCurSel($h_C_Header, 2)
 				EndIf
 
-				$h_C_Unlink = GUICtrlCreateCheckbox("Unlink from PEB", 20, 345)
+					$h_L_Unlink = GUICtrlCreateLabel("", 20, 335, 100, 20)
+						GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
+				$h_C_Unlink = GUICtrlCreateCheckbox("Unlink from PEB", 20, 335, 100, 20)
 				If (BitAND($g_InjectionFlags, $INJ_UNLINK_FROM_PEB)) Then
 					GUICtrlSetState($h_C_Unlink, $GUI_CHECKED)
 				EndIf
 				If ($g_InjectionMethod = 2) Then
 					GUICtrlSetState($h_C_Unlink, BitOr($GUI_CHECKED, $GUI_DISABLE))
+					GUICtrlSetState($h_L_Shift, $GUI_ENABLE)
 				EndIf
 
-				$h_C_Shift 	= GUICtrlCreateCheckbox("Shift module", 125, 320)
-				$h_C_Clean  = GUICtrlCreateCheckbox("Clean data directories", 125, 345)
+					$h_L_Shift 	= GUICtrlCreateLabel("", 125, 310, 125, 20)
+						GUICtrlSetState($h_L_Shift, $GUI_DISABLE)
+				$h_C_Shift 	= GUICtrlCreateCheckbox("Shift module", 125, 310, 125, 20)
+					$h_L_Clean  = GUICtrlCreateLabel("", 125, 335, 110, 20)
+						GUICtrlSetState($h_L_Clean, $GUI_DISABLE)
+				$h_C_Clean  = GUICtrlCreateCheckbox("Clean data directories", 125, 335, 120, 20)
 				If ($g_InjectionMethod <> 2) Then
 					GUICtrlSetState($h_C_Shift, $GUI_DISABLE)
 					GUICtrlSetState($h_C_Clean, $GUI_DISABLE)
+					GUICtrlSetState($h_L_Shift, $GUI_ENABLE)
+					GUICtrlSetState($h_L_Clean, $GUI_ENABLE)
 				Else
 					If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
 						GUICtrlSetState($h_C_Shift, $GUI_CHECKED)
@@ -186,26 +407,38 @@ Func CreateGUI()
 					EndIf
 				EndIf
 
-		$h_B_Reset = GUICtrlCreateButton("Reset", $l_GUIWidth / 24 + 3, $l_GUIHeight - 45, $l_GUIWidth / 4, 22)
+				$h_C_RandomizeName 	= GUICtrlCreateCheckbox("Randomize file name", 125, 360)
+				$h_C_LoadCopy		= GUICtrlCreateCheckbox("Load DLL copy", 20, 360)
+				If (BitAND($g_InjectionFlags, $INJ_SCRAMBLE_DLL_NAME)) Then
+					GUICtrlSetState($h_C_RandomizeName, $GUI_CHECKED)
+				EndIf
+				If (BitAND($g_InjectionFlags, $INJ_LOAD_DLL_COPY)) Then
+					GUICtrlSetState($h_C_LoadCopy, $GUI_CHECKED)
+				EndIf
 
-	$h_L_Dlls = GUICtrlCreateListView("|Filename|Path|", $l_GUIWidth / 3 + 10, 95, 2 * $l_GUIWidth / 3 - 25, $l_GUIHeight - 200, $LVS_REPORT, BitOR($LVS_EX_FULLROWSELECT, $LVS_EX_CHECKBOXES))
-		_GUICtrlListView_SetColumnWidth($h_L_Dlls, 0, 18)
-		_GUICtrlListView_SetColumnWidth($h_L_Dlls, 1, 120)
-		_GUICtrlListView_SetColumnWidth($h_L_Dlls, 2, 2 * $l_GUIWidth / 3 - 170)
-		_GUICtrlListView_SetColumnWidth($h_L_Dlls, 3, 0)
-		GUICtrlSetState($h_L_Dlls, $GUI_DROPACCEPTED)
+		$h_B_Reset = GUICtrlCreateButton("Reset settings", $l_GUIWidth / 24 + 3, $l_GUIHeight - 45, $l_GUIWidth / 4, 22)
 
-	$h_G_DllList = GUICtrlCreateGroup("Files", $l_GUIWidth / 3 + 5, 80, 2 * $l_GUIWidth / 3 - 15, $l_GUIHeight - 145, $SS_SUNKEN)
-		GUICtrlSetFont($h_G_DllList, 11, $FW_BOLD)
 
-		$h_B_Add 	= GUICtrlCreateButton("Add files", $l_GUIWidth / 3 + 15, $l_GUIHeight - 95, $l_GUIWidth / 6, 22)
-		$h_B_Inject = GUICtrlCreateButton("Inject", 2 * $l_GUIWidth / 3 - $l_GUIWidth / 12, $l_GUIHeight - 95, $l_GUIWidth / 6, 22)
-		$h_B_Remove = GUICtrlCreateButton("Remove selected", $l_GUIWidth - $l_GUIWidth / 6 - 20, $l_GUIHeight - 95, $l_GUIWidth / 6, 22)
+	CreateGroupBox(" Files ", 44, 25, 0, $FW_BOLD, $l_GUIWidth / 3 + 5, 80, 2 * $l_GUIWidth / 3 - 15, $l_GUIHeight - 145, 0xB0B0B0)
 
-	$h_G_Info = GUICtrlCreateGroup("Info", $l_GUIWidth / 3 + 5, $l_GUIHeight - 62, 2 * $l_GUIWidth / 3 - 15, 47, $SS_SUNKEN)
-		GUICtrlSetFont($h_G_Info, 11, $FW_BOLD)
+        $h_L_Dlls = GUICtrlCreateListView("|Filename|Path|Architecture|foo", $l_GUIWidth / 3 + 10, 95, 2 * $l_GUIWidth / 3 - 25, $l_GUIHeight - 200, $LVS_REPORT, BitOR($LVS_EX_FULLROWSELECT, $LVS_EX_CHECKBOXES, $LVS_EX_GRIDLINES))
+		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 0, 18)
+		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 1, 120)
+		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 2, 2 * $l_GUIWidth / 3 - 280)
+		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 3, 85)
+		   _GUICtrlListView_SetColumnWidth($h_L_Dlls, 4, 0)
+		   GUICtrlSetState($h_L_Dlls, $GUI_DROPACCEPTED)
 
-		$h_L_Version = GUICtrlCreateLabel("Version " & $g_CurrentVersion, $l_GUIWidth / 3 + 15, $l_GUIHeight - 45, $l_GUIWidth / 8, 22, BitOR($SS_SUNKEN, $SS_CENTER))
+		   $h_B_Add 	= GUICtrlCreateButton("Add files", $l_GUIWidth / 3 + 15, $l_GUIHeight - 95, $l_GUIWidth / 6, 22)
+		   $h_B_Inject 	= GUICtrlCreateButton("Inject", 2 * $l_GUIWidth / 3 - $l_GUIWidth / 12, $l_GUIHeight - 95, $l_GUIWidth / 6, 22)
+		   $h_B_Remove 	= GUICtrlCreateButton("Remove selected files", $l_GUIWidth - $l_GUIWidth / 6 - 20, $l_GUIHeight - 95, $l_GUIWidth / 6, 22)
+
+	CreateGroupBox(" Info ", 35, 25, 0, $FW_BOLD, $l_GUIWidth / 3 + 5, $l_GUIHeight - 55, 2 * $l_GUIWidth / 3 - 15, 40, 0xB0B0B0)
+
+		$h_B_ToggleTips	= GUICtrlCreateButton("Disable Tooltips", $l_GUIWidth / 3 + 15, $l_GUIHeight - 45, $l_GUIWidth / 8, 22)
+		$h_B_Help 		= GUICtrlCreateButton("Help", 37 * $l_GUIWidth / 72 + 10 / 3, $l_GUIHeight - 45, $l_GUIWidth / 8, 22)
+		$h_B_Changelog 	= GUICtrlCreateButton("Changelog", 25 * $l_GUIWidth / 36 - 25 / 3, $l_GUIHeight - 45, $l_GUIWidth / 8, 22)
+		$h_L_Version 	= GUICtrlCreateLabel("Version " & $g_CurrentVersion, 7 * $l_GUIWidth / 8 - 20, $l_GUIHeight - 44, $l_GUIWidth / 8, 21, BitOR($SS_SUNKEN, $SS_CENTER))
 			GUICtrlSetFont($h_L_Version, 12, $FW_BOLD)
 			GUICtrlSetBkColor($h_L_Version, 0xCCCCAA)
 
@@ -216,128 +449,266 @@ Func CreateGUI()
 				GUICtrlSetColor($h_L_Version, 0x559955)
 			EndIf
 
-		$h_B_Help 		= GUICtrlCreateButton("Help", 37 * $l_GUIWidth / 72 + 10 / 3, $l_GUIHeight - 45, $l_GUIWidth / 8, 22)
-		$h_B_Changelog 	= GUICtrlCreateButton("Changelog", 25 * $l_GUIWidth / 36 - 25 / 3, $l_GUIHeight - 45, $l_GUIWidth / 8, 22)
-		$h_B_Broihon 	= GUICtrlCreateButton("Broihon", 7 * $l_GUIWidth / 8 - 20, $l_GUIHeight - 45, $l_GUIWidth / 8, 22)
-
 	GUIRegisterMsg($WM_NOTIFY,	 	"WM_NOTIFY")
 	GUIRegisterMsg($WM_DROPFILES, 	"WM_DROPFILES")
 	GUIRegisterMsg($WM_COMMAND, 	"WM_COMMAND")
 
+    $h_GUI_LV_SubclassProc 	= DllCallbackRegister("GUI_LV_SubclassProc", 'lresult', 'hwnd;uint;wparam;lparam;uint_ptr;dword_ptr')
+	$ph_GUI_LV_SubclassProc = DllCallbackGetPtr($h_GUI_LV_SubclassProc)
+	_WinAPI_SetWindowSubclass(GUICtrlGetHandle($h_L_Dlls), $ph_GUI_LV_SubclassProc, 1, 0)
+
+	$h_T_TooltipCtrl = _GUIToolTip_Create($h_GUI)
+    _GUIToolTip_SetDelayTime($h_T_TooltipCtrl, $TTDT_AUTOPOP, 32767)
+    _GUIToolTip_SetMaxTipWidth($h_T_TooltipCtrl, 1000)
+	_GUIToolTip_SetTitle($h_T_TooltipCtrl, "Info", $TTI_INFO)
+
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select the target process by it's executable name (not unique).", GUICtrlGetHandle($h_L_ProcName))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select the target process by it's executable name (not unique).", GUICtrlGetHandle($h_R_ProcName))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select the target process by it's identifier (unique but changes when the process restarts).", GUICtrlGetHandle($h_L_PID))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select the target process by it's identifier (unique but changes when the process restarts).", GUICtrlGetHandle($h_R_PID))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Select a process using the ProcessPicker.", GUICtrlGetHandle($h_B_SelProcess))
+
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Delays the injection (in ms).", GUICtrlGetHandle($h_G_InjDelay))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "The injector automatically closes after injecting the checkmarked dll(s).", GUICtrlGetHandle($h_C_CloseAI))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "If the injector finds the target process, it automatically injects the checkmarked dll(s).", GUICtrlGetHandle($h_C_AutoI))
+
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "LoadLibraryA is the default injection method which simply uses LoadLibraryA." & @CRLF & _
+		"LdrLoadDll is an advanced injection method which uses LdrLoadDll and bypasses LoadLibrary(Ex) hooks." & @CRLF & _
+		"ManualMap is an advanced injection technique which bypasses most module detection methods.", GUICtrlGetHandle($h_C_Method))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Rake is love, Rake is life, Mambda is ogre.", GUICtrlGetHandle($h_L_HijackHandle));dummy label
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Rake is love, Rake is life, Mambda is ogre.", GUICtrlGetHandle($h_C_HijackHandle))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "NtCreateThreadEx: Creates a simple remote thread to load the dll(s)." & @CRLF & _
+		"Thread hijacking: Redirects a thread to a codecave to load the dll(s)." & @CRLF & _
+		"SetWindowsHookEx: Adds a hook into the window callback list which then loads the dll(s)." & @CRLF & _
+		"QueueUserAPC: Registers an asynchronous procedure call to the process' threads which then loads the dll(s).", GUICtrlGetHandle($h_C_LaunchMethod))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Adds a flag to NtCreateThreadEx which hides the thread from debuggers.", GUICtrlGetHandle($h_L_HTFD));dummy label
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Adds a flag to NtCreateThreadEx which hides the thread from debuggers.", GUICtrlGetHandle($h_C_HTFD))
+
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Keep PEH: Doesn't modify the PE header of the dll(s)." & @CRLF & _
+		"Erase PEH: Erases the PE header by wrting 0's to it to avoid detections." & @CRLF & _
+		"Fake PEH: Replaces the PE header with the PE header of a normal windows module (eg. kernel32.dll).", GUICtrlGetHandle($h_C_Header))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Shifts the image by a randomly generated amount of bytes (manual mapping only).", GUICtrlGetHandle($h_L_Shift));dummy label
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Shifts the image by a randomly generated amount of bytes (manual mapping only).", GUICtrlGetHandle($h_C_Shift))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Removes the list entry of the dll(s) from the lists in the process enviroment block (not needed for manual mapping).", GUICtrlGetHandle($h_L_Unlink));dummy label
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Removes the list entry of the dll(s) from the lists in the process enviroment block (not needed for manual mapping).", GUICtrlGetHandle($h_C_Unlink))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Removes unnecessary data from the data directory of the image (manual mapping only).", GUICtrlGetHandle($h_L_Clean));dummy label
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Removes unnecessary data from the data directory of the image (manual mapping only).", GUICtrlGetHandle($h_C_Clean))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Creates a copy of the dll(s) in the user's temp directory which then get(s) loaded into the target process.", GUICtrlGetHandle($h_C_LoadCopy))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Renames the dll(s) randomly before injecting it/them.", GUICtrlGetHandle($h_C_RandomizeName))
+
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Inject checkmarked dll(s).", GUICtrlGetHandle($h_B_Inject))
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "Click to remove highlighted entries from the list.", GUICtrlGetHandle($h_B_Remove))
+
+	_GUIToolTip_AddTool($h_T_TooltipCtrl, 0, "You won't have to see this again.", GUICtrlGetHandle($h_B_ToggleTips))
+
+	If ($g_ToolTipsOn = False) Then
+		_GUIToolTip_Deactivate($h_T_TooltipCtrl)
+		GUICtrlSetData($h_B_ToggleTips, "Enable Tooltips")
+	EndIf
+
 	GUISetState(@SW_SHOW, $h_GUI)
 
-	Local $hDC = _WinAPI_GetDC($h_GUI)
-	$BackgroundColour = _WinAPI_GetBkColor($hDC)
-	_WinAPI_ReleaseDC($h_GUI, $hDC)
-	_GUIImageList_Add($h_P_ProcIcon, _WinAPI_CreateSolidBitmap($h_GUI, $BackgroundColour, 21, 20))
+	Local $Accel_CtrlA[1][2] = [[ "^a", $h_D_SelAll ]]
+    GUISetAccelerators($Accel_CtrlA)
+
+	$h_bitmap_buffer[$A_ID_Unused]		= CreateBitmapFromIcon(_WinAPI_GetSysColor($COLOR_MENU), @SystemDir & '\shell32.dll', 0, 16)
+	$h_bitmap_buffer[$A_ID_Toggle]		= CreateBitmapFromIcon(_WinAPI_GetSysColor($COLOR_MENU), @SystemDir & '\shell32.dll', 238, 16)
+	$h_bitmap_buffer[$A_ID_Activate]  	= CreateBitmapFromIcon(_WinAPI_GetSysColor($COLOR_MENU), @SystemDir & '\shell32.dll', 296, 16)
+	$h_bitmap_buffer[$A_ID_Deactivate] 	= CreateBitmapFromIcon(_WinAPI_GetSysColor($COLOR_MENU), @SystemDir & '\shell32.dll', 131, 16)
+	$h_bitmap_buffer[$A_ID_Open]		= CreateBitmapFromIcon(_WinAPI_GetSysColor($COLOR_MENU), @SystemDir & '\shell32.dll', 45, 16)
+	$h_bitmap_buffer[$A_ID_SelectAll]	= CreateBitmapFromIcon(_WinAPI_GetSysColor($COLOR_MENU), @SystemDir & '\shell32.dll', 165, 16)
+	$h_bitmap_buffer[$A_ID_Delete]		= CreateBitmapFromIcon(_WinAPI_GetSysColor($COLOR_MENU), @SystemDir & '\shell32.dll', 32, 16)
+
+	$h_P_ProcIcon = _GUIImageList_Create(20, 20, 5, 1)
+	   _GUIImageList_AddIcon($h_P_ProcIcon, @SystemDir & "\shell32.dll", 131, True)
+	   _GUIImageList_AddIcon($h_P_ProcIcon, @SystemDir & "\imageres.dll", 11, True)
+	   _GUIImageList_Add($h_P_ProcIcon, _WinAPI_CreateSolidBitmap($h_GUI, _WinAPI_GetSysColor($COLOR_MENU), 20, 20))
+	   _GUIImageList_AddIcon($h_P_ProcIcon, $l_IconPath, 0, True)
 
 EndFunc   ;==>CreateGUI
 
+Func CreateGroupBox($Title, $TextWidth, $TextHeight, $TextColour, $TextStyle, $x, $y, $w, $h, $BorderColour)
+
+	$h_tr 	= GUICtrlCreateLabel("", $x, $y, $w / 2 - $TextWidth / 2 + 0.5, 1)
+	GUICtrlSetBkColor(-1, $BorderColour)
+
+	$h_tr 	= GUICtrlCreateLabel("", $x + $w / 2 + $TextWidth / 2, $y, $w / 2 - $TextWidth / 2 + 0.5, 1)
+	GUICtrlSetBkColor(-1, $BorderColour)
+
+	$h_r 	= GUICtrlCreateLabel("", $x, $y + 1, 1, $h - 1)
+	GUICtrlSetBkColor(-1, $BorderColour)
+
+	$h_l 	= GUICtrlCreateLabel("", $x + $w - 1, $y + 1, 1, $h - 1)
+	GUICtrlSetBkColor(-1, $BorderColour)
+
+	$h_b 	= GUICtrlCreateLabel("", $x + 1, $y + $h - 1, $w - 2, 1)
+	GUICtrlSetBkColor(-1, $BorderColour)
+
+	$h_l 	= GUICtrlCreateLabel($Title, $x + $w / 2 - $TextWidth / 2, $y - $TextHeight / 3, $TextWidth, $TextHeight)
+	GUICtrlSetFont(-1, $TextHeight / 2, $TextStyle)
+	GUICtrlSetColor(-1, $TextColour)
+
+EndFunc   ;==>CreateGroupBox
+
+Func CreateBitmapFromIcon($BackgroundColour, $FilePath, $IconIndex, $Size)
+
+    Local $hDC, $hBackDC, $hBackSv, $hIcon, $hBitmap
+
+    $hDC = _WinAPI_GetDC(0)
+    $hBackDC = _WinAPI_CreateCompatibleDC($hDC)
+    $hBitmap = _WinAPI_CreateSolidBitmap(0, $BackgroundColour, $Size, $Size)
+    $hBackSv = _WinAPI_SelectObject($hBackDC, $hBitmap)
+    $hIcon = _WinAPI_ExtractIcon($FilePath, $IconIndex, True)
+
+    If NOT @error Then
+        _WinAPI_DrawIconEx($hBackDC, 0, 0, $hIcon, 0, 0, 0, 0, $DI_NORMAL)
+        _WinAPI_DestroyIcon($hIcon)
+	 EndIf
+
+    _WinAPI_SelectObject($hBackDC, $hBackSv)
+    _WinAPI_ReleaseDC(0, $hDC)
+    _WinAPI_DeleteDC($hBackDC)
+
+    Return $hBitmap
+
+EndFunc   ;==>CreateBitmapFromIcon
+
 Func DllList_PopUp($hwnd)
 
-	$idTog 	= 1
-	$idAct	= 2
-	$idDct	= 3
-	$idDel	= 4
-	$idOpen = 5
+   Local $ItemHit = _GUICtrlListView_HitTest($hwnd)
+   If (UBound($ItemHit) AND $ItemHit[0] <> -1) Then
+	  $h_M_PopUp = _GUICtrlMenu_CreatePopup()
+		 For $i = 0 To UBound($g_PopUpMenu_0_Names) - 1 Step 1
+			$index = _GUICtrlMenu_AddMenuItem($h_M_PopUp, $g_PopUpMenu_0_Names[$i], $g_PopUpMenu_0_AIDs[$i])
+			_GUICtrlMenu_SetItemBmp($h_M_PopUp, $index, $h_bitmap_buffer[$g_PopUpMenu_0_AIDs[$i]])
+		 Next
 
-	$ItemHit = _GUICtrlListView_HitTest($hwnd)
-	If (UBound($ItemHit) AND $ItemHit[0] <> -1) Then
-		$h_M_PopUp = _GUICtrlMenu_CreatePopup()
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Toggle", $idTog)
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Activate", $idAct)
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Deactivate", $idDct)
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Delete", $idDel)
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Open", $idOpen)
+	  $popup_action_id = _GUICtrlMenu_TrackPopupMenu($h_M_PopUp, $hwnd, -1, -1, 1, 1, 2)
+	  _GUICtrlMenu_DestroyMenu($h_M_PopUp)
 
-		$selInd = _GUICtrlListView_GetSelectedIndices($h_L_Dlls, True)
-		If ($selInd[0] = 0) Then
-			_GUICtrlMenu_DestroyMenu($h_M_PopUp)
-			Return
-		EndIf
+	  UpdateLV($h_L_Dlls, $popup_action_id, $M_Selected)
 
-		Switch _GUICtrlMenu_TrackPopupMenu($h_M_PopUp, $hwnd, -1, -1, 1, 1, 2)
-			Case $idTog
-				For $i = 1 To $selInd[0] Step 1
-					$state = _GUICtrlListView_GetItemChecked($h_L_Dlls, $selInd[$i])
-					If ($state) Then
-						$state = False
-					Else
-						$state = True
-					EndIf
-					_GUICtrlListView_SetItemChecked($h_L_Dlls, $selInd[$i], $state)
-				Next
+   Else
+	  $h_M_PopUp = _GUICtrlMenu_CreatePopup()
+		 For $i = 0 To UBound($g_PopUpMenu_1_Names) - 1 Step 1
+			$index = _GUICtrlMenu_AddMenuItem($h_M_PopUp, $g_PopUpMenu_1_Names[$i], $g_PopUpMenu_1_AIDs[$i])
+			_GUICtrlMenu_SetItemBmp($h_M_PopUp, $index, $h_bitmap_buffer[$g_PopUpMenu_1_AIDs[$i]])
+		 Next
 
-			Case $idAct
-				For $i = 1 To $selInd[0] Step 1
-					_GUICtrlListView_SetItemChecked($h_L_Dlls, $selInd[$i])
-				Next
+	  $popup_action_id = _GUICtrlMenu_TrackPopupMenu($h_M_PopUp, $hwnd, -1, -1, 1, 1, 2)
+	  UpdateLV($h_L_Dlls, $popup_action_id, $M_All)
 
-			Case $idDct
-				For $i = 1 To $selInd[0] Step 1
-					_GUICtrlListView_SetItemChecked($h_L_Dlls, $selInd[$i], False)
-				Next
-
-			Case $idDel
-				For $i = 1 To $selInd[0] Step 1
-					_GUICtrlListView_DeleteItem($h_L_Dlls, $selInd[$i])
-					For $j = $i To $selInd[0] Step 1
-						$selInd[$j] -= 1
-					Next
-				Next
-
-			Case $idOpen
-				$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, $ItemHit[0], 2)
-				$index = StringInStr($filepath, "\", 0, -1)
-				$filepath = StringTrimRight($filepath, StringLen($filepath) - $index)
-				AddFiles($filepath)
-
-		EndSwitch
-
-		_GUICtrlMenu_DestroyMenu($h_M_PopUp)
-	Else
-		$h_M_PopUp = _GUICtrlMenu_CreatePopup()
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Toggle all", $idTog)
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Activate all", $idAct)
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Deactivate all", $idDct)
-			_GUICtrlMenu_AddMenuItem($h_M_PopUp, "Delete all", $idDel)
-
-		Switch _GUICtrlMenu_TrackPopupMenu($h_M_PopUp, $hwnd, -1, -1, 1, 1, 2)
-			Case $idTog
-				$count = _GUICtrlListView_GetItemCount($h_L_Dlls)
-				For $i = 0 To $count - 1 Step 1
-					$state = _GUICtrlListView_GetItemChecked($h_L_Dlls, $i)
-					If ($state) Then
-						$state = False
-					Else
-						$state = True
-					EndIf
-					_GUICtrlListView_SetItemChecked($h_L_Dlls, $i, $state)
-				Next
-
-			Case $idAct
-				$count = _GUICtrlListView_GetItemCount($h_L_Dlls)
-				For $i = 0 To $count - 1 Step 1
-					_GUICtrlListView_SetItemChecked($h_L_Dlls, $i)
-				Next
-
-			Case $idDct
-				$count = _GUICtrlListView_GetItemCount($h_L_Dlls)
-				For $i = 0 To $count - 1 Step 1
-					_GUICtrlListView_SetItemChecked($h_L_Dlls, $i, False)
-				Next
-
-			Case $idDel
-				_GUICtrlListView_DeleteAllItems($h_L_Dlls)
-
-		EndSwitch
-
-		_GUICtrlMenu_DestroyMenu($h_M_PopUp)
+	  _GUICtrlMenu_DestroyMenu($h_M_PopUp)
 	EndIf
 
 EndFunc   ;==>DllList_PopUp
 
-Func WM_NOTFIY_GUI($hwnd, $uMsg, $wParam, $lParam)
+Func UpdateLV($hListView, $ActionID, $Mode = $M_All, $Index = -1)
+
+   $Count 		= _GUICtrlListView_GetItemCount($hListView)
+   $SelIndices 	= _GUICtrlListView_GetSelectedIndices($hListView, True)
+
+   Switch $ActionID
+	  Case $A_ID_Toggle
+		 If ($Mode = $M_Index) Then
+			$checked = _GUICtrlListView_GetItemChecked($hListView, $Index)
+			If ($checked = True) Then
+			  _GUICtrlListView_SetItemChecked($hListView, $Index, False)
+			Else
+			  _GUICtrlListView_SetItemChecked($hListView, $Index, True)
+			EndIf
+		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices)) Then
+			For $i = 1 To $SelIndices[0] Step 1
+			   $checked = _GUICtrlListView_GetItemChecked($hListView, $SelIndices[$i])
+			   If ($checked = True) Then
+				  _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], False)
+			   Else
+				  _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], True)
+			   EndIf
+			Next
+		 ElseIf ($Mode = $M_All) Then
+			For $i = 0 To $Count - 1 Step 1
+			   $checked = _GUICtrlListView_GetItemChecked($hListView, $i)
+			   If ($checked = True) Then
+				  _GUICtrlListView_SetItemChecked($hListView, $i, False)
+			   Else
+				  _GUICtrlListView_SetItemChecked($hListView, $i, True)
+			   EndIf
+			Next
+		 EndIf
+
+	  Case $A_ID_Activate
+		 If ($Mode = $M_Index) Then
+			_GUICtrlListView_SetItemChecked($hListView, $Index, True)
+		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+			For $i = 1 To $SelIndices[0] Step 1
+			   _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], True)
+			Next
+		 ElseIf ($Mode = $M_All) Then
+			For $i = 0 To $Count - 1 Step 1
+			   _GUICtrlListView_SetItemChecked($hListView, $i, True)
+			Next
+		 EndIf
+
+	  Case $A_ID_Deactivate
+		 If ($Mode = $M_Index) Then
+			_GUICtrlListView_SetItemChecked($hListView, $Index, False)
+		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+			For $i = 1 To $SelIndices[0] Step 1
+			   _GUICtrlListView_SetItemChecked($hListView, $SelIndices[$i], False)
+			Next
+		 ElseIf ($Mode = $M_All) Then
+			For $i = 0 To $Count - 1 Step 1
+			   _GUICtrlListView_SetItemChecked($hListView, $i, False)
+			Next
+		 EndIf
+
+	  Case $A_ID_Open
+		 $filepath = 0
+		 If ($Mode = $M_Index) Then
+			$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, $Index, 2)
+		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+			$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, $SelIndices[1], 2)
+		 ElseIf ($Mode = $M_All) Then
+			$filepath = _GUICtrlListView_GetItemText($h_L_Dlls, 0, 2)
+		 EndIf
+		 If (IsString($filepath)) Then
+			AddFiles($filepath)
+		 EndIf
+
+	  Case $A_ID_SelectAll
+		 _GUICtrlListView_SetItemSelected($hListView, -1)
+
+	  Case $A_ID_Delete
+		 If ($Mode = $M_Index) Then
+			_GUICtrlListView_DeleteItem($hListView, $Index)
+		 ElseIf ($Mode = $M_Selected AND UBound($SelIndices) AND $SelIndices[0]) Then
+			For $i = $SelIndices[0] To 1 Step -1
+			   _GUICtrlListView_DeleteItem($hListView, $SelIndices[$i])
+			Next
+		 ElseIf ($Mode = $M_All) Then
+			_GUICtrlListView_DeleteAllItems($hListView)
+		 EndIf
+
+   EndSwitch
+
+EndFunc   ;==>UpdateLV
+
+Func GUI_LV_SubclassProc($hWnd, $uMsg, $wParam, $lParam, $iID, $pData)
+
+   If ($hWnd = GUICtrlGetHandle($h_L_Dlls)) Then
+	  If($uMsg = $WM_GETDLGCODE) Then
+		 If ($wParam = $VK_DELETE) Then
+			UpdateLV($h_L_Dlls, $A_ID_Delete, $M_Selected)
+		 EndIf
+	  EndIf
+   EndIf
+
+   Return DllCall("Comctl32.dll", "lresult", "DefSubclassProc", "hwnd", $hWnd, "uint", $uMsg, "wparam", $wParam, "lparam", $lParam)[0]
+
+EndFunc   ;==>LV_SubClassProc
+
+Func GUI_GUI_WM_NOTIFY($hwnd, $uMsg, $wParam, $lParam)
 
 	$tNMHDR = DllStructCreate($tagNMHDR, $lParam)
 
@@ -349,34 +720,36 @@ Func WM_NOTFIY_GUI($hwnd, $uMsg, $wParam, $lParam)
 	If (HWnd($tNMHDR.hwndFrom) = $hListView) Then
 		If ($tNMHDR.code = $NM_RCLICK) Then
 			DllList_PopUp($hListView)
-			Return 0
 
 		ElseIf ($tNMHDR.code = $NM_CUSTOMDRAW) Then
-			If (_GUICtrlListView_GetColumnWidth($h_L_Dlls, 3) <> 0) Then
-				_GUICtrlListView_SetColumnWidth($h_L_Dlls, 3, 0)
+
+		    If (_GUICtrlListView_GetColumnWidth($h_L_Dlls, 0) <> 18) Then
+				_GUICtrlListView_SetColumnWidth($h_L_Dlls, 0, 18)
+		    EndIf
+
+			If (_GUICtrlListView_GetColumnWidth($h_L_Dlls, 4) <> 0) Then
+				_GUICtrlListView_SetColumnWidth($h_L_Dlls, 4, 0)
 			EndIf
-			Return 0
 
 		ElseIf ($tNMHDR.code = $NM_DBLCLK) Then
 			$tInfo = DllStructCreate($tagNMITEMACTIVATE, $lParam)
 			If ($tInfo.SubItem > 0) Then
 				$l_DoubleClickedDll = $tInfo.Index
 			EndIf
-			Return 0
 
 		EndIf
 	EndIf
 
     Return $GUI_RUNDEFMSG
 
-EndFunc
+EndFunc   ;==>GUI_GUI_WM_NOTIFY
 
 Func WM_NOTIFY($hwnd, $uMsg, $wParam, $lParam)
 
 	If (NOT $l_ProcessPickerActive) Then
-		Return WM_NOTFIY_GUI($hwnd, $uMsg, $wParam, $lParam)
+		Return GUI_GUI_WM_NOTIFY($hwnd, $uMsg, $wParam, $lParam)
 	Else
-		Return WM_NOTIFY_ProcessPicker($hwnd, $uMsg, $wParam, $lParam)
+		Return PP_GUI_WM_NOTIFY($hwnd, $uMsg, $wParam, $lParam)
 	EndIf
 
 EndFunc   ;==>WM_NOTFIY
@@ -413,7 +786,6 @@ Func WM_COMMAND($hwnd, $uMsg, $wParam, $lParam)
 			$g_InjectionDelay = GUICtrlRead($h_I_InjDelay)
 		EndIf
 
-		Return 0
 	EndIf
 
     Return $GUI_RUNDEFMSG
@@ -423,6 +795,7 @@ EndFunc   ;==>WM_COMMAND
 Func ResetGUI()
 
 		GUICtrlSetState($h_R_ProcName, $GUI_CHECKED)
+		GUICtrlSetState($h_I_ProcName, $GUI_ENABLE)
 		GUICtrlSetState($h_I_PID, $GUI_DISABLE)
 
 		GUICtrlSetData($h_I_ProcName, $g_Processname)
@@ -442,24 +815,28 @@ Func ResetGUI()
 			GUICtrlSetState($h_C_AutoI, $GUI_UNCHECKED)
 		EndIf
 
-		If NOT ($g_InjectionMethod) Then
-			GUICtrlSetState($h_R_LoadLib, $GUI_CHECKED)
-		ElseIf ($g_InjectionMethod = 1) Then
-			GUICtrlSetState($h_R_LdrDll, $GUI_CHECKED)
-		ElseIf ($g_InjectionMethod = 2) Then
-			GUICtrlSetState($h_R_MMap, $GUI_CHECKED)
-		EndIf
+		_GUICtrlComboBox_SetCurSel($h_C_Method, $g_InjectionMethod)
+
+		;If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+			;GUICtrlSetState($h_C_HijackHandle, BitOR($GUI_CHECKED, $GUI_ENABLE))
+		;Else
+			;GUICtrlSetState($h_C_HijackHandle, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
+		;EndIf
 
 		_GUICtrlComboBox_SetCurSel($h_C_LaunchMethod, $g_LaunchMethod)
 
 		If ($g_LaunchMethod = 0) Then
+			GUICtrlSetState($h_L_HTFD, $GUI_DISABLE)
+			$state = 0
 			If (BitAND($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)) Then
-				GUICtrlSetState($h_C_HTFD, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
+				$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
 			Else
-				GUICtrlSetState($h_C_HTFD, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
+				$state = BitOR($GUI_UNCHECKED, $GUI_ENABLE)
 			EndIf
+			GUICtrlSetState($h_C_HTFD, $state)
 		Else
 			GUICtrlSetState($h_C_HTFD, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+			GUICtrlSetState($h_L_HTFD, $GUI_ENABLE)
 		EndIf
 
 		_GUICtrlComboBox_SetCurSel($h_C_Header, 0)
@@ -469,26 +846,61 @@ Func ResetGUI()
 			_GUICtrlComboBox_SetCurSel($h_C_Header, 2)
 		EndIf
 
-		If (BitAND($g_InjectionFlags, $INJ_UNLINK_FROM_PEB)) Then
-			GUICtrlSetState($h_C_Unlink, $GUI_CHECKED)
+		If($g_InjectionMethod = 2) Then
+			GUICtrlSetState($h_C_Unlink, BitOR($GUI_CHECKED, $GUI_DISABLE))
+			GUICtrlSetState($h_L_Unlink, $GUI_ENABLE)
+		ElseIf (BitAND($g_InjectionFlags, $INJ_UNLINK_FROM_PEB)) Then
+			GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
+			GUICtrlSetState($h_C_Unlink, BitOR($GUI_CHECKED, $GUI_ENABLE))
 		Else
-			GUICtrlSetState($h_C_Unlink, $GUI_UNCHECKED)
+			GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
+			GUICtrlSetState($h_C_Unlink, BitOR($GUI_UNCHECKED, $GUI_ENABLE))
 		EndIf
-
 
 		If ($g_InjectionMethod <> 2) Then
-			GUICtrlSetState($h_C_Shift, $GUI_DISABLE)
-			GUICtrlSetState($h_C_Clean, $GUI_DISABLE)
+			GUICtrlSetState($h_C_Shift, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+			GUICtrlSetState($h_L_Shift, $GUI_ENABLE)
+			GUICtrlSetState($h_C_Clean, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+			GUICtrlSetState($h_L_Clean, $GUI_ENABLE)
 		Else
+			GUICtrlSetState($h_L_Shift, $GUI_DISABLE)
+			$state = 0
 			If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
-				GUICtrlSetState($h_C_Shift, $GUI_CHECKED)
+				$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
+			Else
+				$state = BitOR($GUI_CHECKED, $GUI_DISABLE)
 			EndIf
-			If (BitAND($g_InjectionFlags, $INJ_CLEAN_DATA_DIR)) Then
-				GUICtrlSetState($h_C_Clean, $GUI_CHECKED)
+			GUICtrlSetState($h_C_Shift, $state)
+
+			GUICtrlSetState($h_L_Clean, $GUI_DISABLE)
+			$state = 0
+			If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
+				$state = BitOR($GUI_CHECKED, $GUI_ENABLE)
+			Else
+				$state = BitOR($GUI_CHECKED, $GUI_DISABLE)
 			EndIf
+			GUICtrlSetState($h_C_Clean, $state)
 		EndIf
 
-		_GUICtrlListView_DeleteAllItems($h_L_Dlls)
+		If (BitAND($g_InjectionFlags, $INJ_SCRAMBLE_DLL_NAME)) Then
+			GUICtrlSetState($h_C_RandomizeName, $GUI_CHECKED)
+		Else
+			GUICtrlSetState($h_C_RandomizeName, $GUI_UNCHECKED)
+		EndIf
+
+		If (BitAND($g_InjectionFlags, $INJ_LOAD_DLL_COPY)) Then
+			GUICtrlSetState($h_C_LoadCopy, $GUI_CHECKED)
+		Else
+			GUICtrlSetState($h_C_LoadCopy, $GUI_UNCHECKED)
+		EndIf
+
+		If ($g_ToolTipsOn = False) Then
+			_GUIToolTip_Deactivate($h_T_TooltipCtrl)
+			GUICtrlSetData($h_B_ToggleTips, "Enable Tooltips")
+		Else
+			_GUIToolTip_Activate($h_T_TooltipCtrl)
+			GUICtrlSetData($h_B_ToggleTips, "Disable Tooltips")
+		EndIf
 
 EndFunc   ;==>ResetGUI
 
@@ -498,7 +910,14 @@ Func CloseGUI()
 	GUIRegisterMsg($WM_DROPFILES, 	"")
 	GUIRegisterMsg($WM_COMMAND, 	"")
 
+    _WinAPI_RemoveWindowSubclass(GUICtrlGetHandle($h_L_Dlls), $ph_GUI_LV_SubclassProc, 1)
+	DllCallbackFree($h_GUI_LV_SubclassProc)
+
 	_GUIImageList_Destroy($h_P_ProcIcon)
+
+	For $i = 0 To UBound($h_bitmap_buffer) - 1 Step 1
+	   _WinAPI_DeleteDC($h_bitmap_buffer[$i])
+    Next
 
 	GUISetState(@SW_HIDE)
 	GUIDelete($h_GUI)
@@ -546,15 +965,46 @@ EndFunc   ;==>CheckBanner
 
 Func AddFile($Path, $UpdateLastDirectory = False)
 
-	If (NOT StringInStr($Path, ".dll")) Then
+	If (NOT StringInStr($Path, ".dll") AND NOT StringInStr($Path, ".exe")) Then
 		Return
+	EndIf
+
+	$DllCount = _GUICtrlListView_GetItemCount($h_L_Dlls)
+	For $i = 0 To $DllCount Step 1
+		$currPath = _GUICtrlListView_GetItemText($h_L_Dlls, $i, 2)
+		If (NOT StringCompare($Path, $currPath)) Then
+			MsgBox($MB_ICONERROR, $Path, "This file is already in the list.")
+			Return
+		EndIf
+	Next
+
+	SetError(0)
+	$Architecture = GetFileArchitecture($Path)
+	If (@error) Then
+		$err = @error
+		SetError(0)
+
+		Select
+			Case $err = 1
+				MsgBox($MB_ICONERROR, "Invalid MZ header: 0x" & Hex($Architecture), $Path)
+				Return
+
+			Case $err = 2
+				MsgBox($MB_ICONERROR, "Invalid PE signature: 0x" & Hex($Architecture), $Path)
+				Return
+
+			Case $err = 3
+				MsgBox($MB_ICONERROR, "Architecture not supported: 0x" & Hex($Architecture), $Path)
+				Return
+		EndSelect
 	EndIf
 
 	Local $Split = StringSplit($Path, "\")
 	$Index = _GUICtrlListView_AddItem($h_L_Dlls, "")
 	_GUICtrlListView_AddSubItem($h_L_Dlls, $Index, $Split[$Split[0]], 1)
 	_GUICtrlListView_AddSubItem($h_L_Dlls, $Index, $Path, 2)
-	_GUICtrlListView_AddSubItem($h_L_Dlls, $Index, 0, 3)
+	_GUICtrlListView_AddSubItem($h_L_Dlls, $Index, $Architecture, 3)
+	_GUICtrlListView_AddSubItem($h_L_Dlls, $Index, 0, 4)
 
 	If ($UpdateLastDirectory = True) Then
 		$g_LastDirectory = ""
@@ -590,23 +1040,15 @@ Func AddFiles($Path = "")
 
 EndFunc   ;==>AddFiles
 
-Func RemoveSelectedFiles()
-
-	$selInd = _GUICtrlListView_GetSelectedIndices($h_L_Dlls, True)
-	If ($selInd[0] = 0) Then
-		Return
-	EndIf
-
-	For $i = 1 To $selInd[0] Step 1
-		_GUICtrlListView_DeleteItem($h_L_Dlls, $selInd[$i])
-		For $j = $i To $selInd[0] Step 1
-			$selInd[$j] -= 1
-		Next
-	Next
-
-EndFunc   ;==>RemoveSelectedFiles
-
 Func UpdateProcessIcon($TargetPID)
+
+    _GUIImageList_Draw($h_P_ProcIcon, 2, _WinAPI_GetDC($h_GUI), 130, 132)
+
+	If (NOT StringCompare($g_Processname, "Broihon.exe") OR $g_PID = 1337) Then
+	    _GUIImageList_Draw($h_P_ProcIcon, 3, _WinAPI_GetDC($h_GUI), 130, 132)
+		$g_ExePath = "Praise Broihon ♥♥♥"
+	    Return
+    EndIf
 
 	If ($TargetPID) Then
 		Local $hK32 = DllOpen("kernel32.dll")
@@ -620,10 +1062,10 @@ Func UpdateProcessIcon($TargetPID)
 
 			Local $dllRet = GetProcessExePath($hProc_info)
 			If (IsArray($dllRet) AND ($dllRet[0] <> 0)) Then
-				$l_ProcIconIndex = 3
-				_GUIImageList_Remove($h_P_ProcIcon, 3)
+				$l_ProcIconIndex = 4
+				_GUIImageList_Remove($h_P_ProcIcon, 4)
 				$g_ExePath = $dllRet[3]
-				If (_GUIImageList_AddIcon($h_P_ProcIcon, $dllRet[3], 0) = -1) Then
+				If (_GUIImageList_AddIcon($h_P_ProcIcon, $dllRet[3], 0, True) = -1) Then
 					$l_ProcIconIndex = 1
 				EndIf
 			EndIf
@@ -637,16 +1079,13 @@ Func UpdateProcessIcon($TargetPID)
 			$g_ExePath = "Can't resolve file path."
 		EndIf
 
-		_GUIImageList_Draw($h_P_ProcIcon, 2, _WinAPI_GetDC($h_GUI), 130, 132)
 		_GUIImageList_Draw($h_P_ProcIcon, $l_ProcIconIndex, _WinAPI_GetDC($h_GUI), 130, 132)
 
 		DllClose($hK32)
 
 	Else
-		$l_ProcIconIndex = 0
 		$g_ExePath = "No process selected."
-		_GUIImageList_Draw($h_P_ProcIcon, 2, _WinAPI_GetDC($h_GUI), 130, 132)
-		_GUIImageList_Draw($h_P_ProcIcon, $l_ProcIconIndex, _WinAPI_GetDC($h_GUI), 130, 132)
+		_GUIImageList_Draw($h_P_ProcIcon, 0, _WinAPI_GetDC($h_GUI), 130, 132)
 	EndIf
 
 EndFunc   ;==>UpdateProcessIcon
@@ -659,6 +1098,11 @@ Func UpdateTargetProcess()
 		$g_Processname = GUICtrlRead($h_I_ProcName)
 		$lPID1 = ProcessExists($g_Processname)
 		$lPID2 = ProcessExists($g_PID)
+
+		If ($l_ChangedFont = True) Then
+			GUICtrlSetFont($h_I_ProcName, 9)
+			$l_ChangedFont = False
+		EndIf
 
 		If ($lPID1) Then
 			If ($lPID2) Then
@@ -684,6 +1128,7 @@ Func UpdateTargetProcess()
 		If (@error) Then
 			GUICtrlSetFont($h_I_ProcName, 9, $FW_LIGHT, $GUI_FONTITALIC)
 			$g_Processname = "Invalid PID"
+			$l_ChangedFont = True
 		Else
 			GUICtrlSetFont($h_I_ProcName, 9)
 		EndIf
@@ -703,21 +1148,24 @@ Func UpdateGUI()
 
 	If ($l_DoubleClickedDll <> -1) Then
 		$filepath 	= _GUICtrlListView_GetItemText($h_L_Dlls, $l_DoubleClickedDll, 2)
-		$index 		= StringInStr($filepath, "\", 0, -1)
-		$filepath 	= StringTrimRight($filepath, StringLen($filepath) - $index)
 		AddFiles($filepath)
 		$l_DoubleClickedDll = -1
 	EndIf
 
 	$Msg = GUIGetMsg($h_GUI)
 	Select
-		Case $Msg = $GUI_EVENT_CLOSE
+	    Case $Msg = $GUI_EVENT_CLOSE
 			Return $GUI_EXIT
 
 		Case $Msg = $h_P_Banner
 			ShellExecute("www.guidedhacking.com")
 
-		Case $Msg = $h_B_SelProcess
+	    Case $Msg = $h_D_SelAll
+		   If (_WinAPI_GetFocus() = GUICtrlGetHandle($h_L_Dlls)) Then
+			   UpdateLV($h_L_Dlls, $A_ID_SelectAll)
+		   EndIf
+
+	   	Case $Msg = $h_B_SelProcess
 			$l_ProcessPickerActive 	= True
 			$l_IgnoreInputChange 	= True
 
@@ -737,7 +1185,7 @@ Func UpdateGUI()
 			AddFiles()
 
 		Case $Msg = $h_B_Remove
-			RemoveSelectedFiles()
+			UpdateLV($h_L_Dlls, $A_ID_Delete, $M_Selected)
 
 		Case $Msg = $GUI_EVENT_DROPPED
 			If ($DropFileBuffer[0]) Then
@@ -753,16 +1201,23 @@ Func UpdateGUI()
 			If ($State = 0) Then
 				$count = _GUICtrlListView_GetItemCount($h_L_Dlls)
 				For $i = 0 To $count - 1 Step 1
-					$state = _GUICtrlListView_GetItemChecked($h_L_Dlls, $i)
-					_GUICtrlListView_SetItemText($h_L_Dlls, $i, Number($state), 3)
+					$is_checked = _GUICtrlListView_GetItemChecked($h_L_Dlls, $i)
+				    If $is_checked Then
+				       _GUICtrlListView_SetItemText($h_L_Dlls, $i, 1, 4)
+				    Else
+				       _GUICtrlListView_SetItemText($h_L_Dlls, $i, 0, 4)
+				    EndIf
 				Next
-				_GUICtrlListView_SimpleSort($h_L_Dlls, $g_DllList_SortSense, 3, True)
+				_GUICtrlListView_SimpleSort($h_L_Dlls, $g_DllList_SortSense, 4, True)
 
 			ElseIf ($State = 1) Then
 				_GUICtrlListView_SimpleSort($h_L_Dlls, $g_DllList_SortSense, 1, True)
 
 			ElseIf ($State = 2) Then
 				_GUICtrlListView_SimpleSort($h_L_Dlls, $g_DllList_SortSense, 2, True)
+
+			ElseIf ($State = 3) Then
+				_GUICtrlListView_SimpleSort($h_L_Dlls, $g_DllList_SortSense, 3, True)
 			EndIf
 
 		Case $Msg = $h_B_Reset
@@ -800,13 +1255,18 @@ Func UpdateGUI()
 				$g_AutoInjection = False
 			EndIf
 
-		Case $Msg = $h_R_LoadLib
-			If (GUICtrlRead($h_R_LoadLib) = $GUI_CHECKED) Then
-				$g_InjectionMethod = 0
+		Case $Msg = $h_C_Method
+			$g_InjectionMethod = _GUICtrlComboBox_GetCurSel($h_C_Method)
+
+			If ($g_InjectionMethod = 0) Then
 				If (GUICtrlGetState($h_C_Shift) <> $GUI_DISABLE) Then
+					GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
 					GUICtrlSetState($h_C_Unlink, $GUI_ENABLE)
+
 					GUICtrlSetState($h_C_Shift, BitOR($GUI_DISABLE, $GUI_UNCHECKED))
 					GUICtrlSetState($h_C_Clean, BitOR($GUI_DISABLE, $GUI_UNCHECKED))
+					GUICtrlSetState($h_L_Shift, $GUI_ENABLE)
+					GUICtrlSetState($h_L_Clean, $GUI_ENABLE)
 
 					If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
 						$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_SHIFT_MODULE)
@@ -815,15 +1275,15 @@ Func UpdateGUI()
 						$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_CLEAN_DATA_DIR)
 					EndIf
 				EndIf
-			EndIf
-
-		Case $Msg = $h_R_LdrDll
-			If (GUICtrlRead($h_R_LdrDll) = $GUI_CHECKED) Then
-				$g_InjectionMethod = 1
+			ElseIf ($g_InjectionMethod = 1) Then
 				If (GUICtrlGetState($h_C_Shift) <> $GUI_DISABLE) Then
+					GUICtrlSetState($h_L_Unlink, $GUI_DISABLE)
 					GUICtrlSetState($h_C_Unlink, $GUI_ENABLE)
+
 					GUICtrlSetState($h_C_Shift, BitOR($GUI_DISABLE, $GUI_UNCHECKED))
 					GUICtrlSetState($h_C_Clean, BitOR($GUI_DISABLE, $GUI_UNCHECKED))
+					GUICtrlSetState($h_L_Shift, $GUI_ENABLE)
+					GUICtrlSetState($h_L_Clean, $GUI_ENABLE)
 
 					If (BitAND($g_InjectionFlags, $INJ_SHIFT_MODULE)) Then
 						$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_SHIFT_MODULE)
@@ -832,27 +1292,45 @@ Func UpdateGUI()
 						$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_CLEAN_DATA_DIR)
 					EndIf
 				EndIf
-			EndIf
-
-		Case $Msg = $h_R_MMap
-			If (GUICtrlRead($h_R_MMap) = $GUI_CHECKED) Then
-				$g_InjectionMethod = 2
+			ElseIf ($g_InjectionMethod = 2) Then
 				If (GUICtrlGetState($h_C_Shift) <> $GUI_ENABLE) Then
+
+					GUICtrlSetState($h_L_Shift, $GUI_DISABLE)
+					GUICtrlSetState($h_L_Clean, $GUI_DISABLE)
 					GUICtrlSetState($h_C_Shift, $GUI_ENABLE)
 					GUICtrlSetState($h_C_Clean, $GUI_ENABLE)
+
 					GUICtrlSetState($h_C_Unlink, BitOR($GUI_CHECKED, $GUI_DISABLE))
+					GUICtrlSetState($h_L_Unlink, $GUI_ENABLE)
+
 					$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_UNLINK_FROM_PEB)
 				EndIf
 			EndIf
+
+		;Case $Msg = $h_C_HijackHandle
+			;If (GUICtrlRead($h_C_HijackHandle) = $GUI_CHECKED) Then
+				;If (NOT BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+					;$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_HIJACK_HANDLE)
+					;MsgBox($MB_ICONWARNING, "Warning", "Handle hijacking attempts to use a handle of a system process. "  _
+						;& "Since this option is still under development it can cause that process to crash which can result in an automated shutdown or even a BSOD." & @CRLF & @CRLF _
+						;& "Use at your own risk.")
+				;EndIf
+			;Else
+				;If (BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE)) Then
+					;$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_HIJACK_HANDLE)
+				;EndIf
+			;EndIf
 
 		Case $Msg = $h_C_LaunchMethod
 			$g_LaunchMethod = _GUICtrlComboBox_GetCurSel($h_C_LaunchMethod)
 			If (($g_LaunchMethod) AND (BitAND(GUICtrlGetState($h_C_HTFD), $GUI_ENABLE))) Then
 				GUICtrlSetState($h_C_HTFD, BitOR($GUI_UNCHECKED, $GUI_DISABLE))
+				GUICtrlSetState($h_L_HTFD, $GUI_ENABLE)
 				If (BitAND($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)) Then
 					$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_HIDE_THREAD_FROM_DEBUGGER)
 				EndIf
 			ElseIf (($g_LaunchMethod = 0) AND (BitAND(GUICtrlGetState($h_C_HTFD), $GUI_DISABLE))) Then
+				GUICtrlSetState($h_L_HTFD, $GUI_DISABLE)
 				GUICtrlSetState($h_C_HTFD, $GUI_ENABLE)
 			EndIf
 
@@ -905,6 +1383,24 @@ Func UpdateGUI()
 				EndIf
 			EndIf
 
+		Case $Msg = $h_C_RandomizeName
+			If (GUICtrlRead($h_C_RandomizeName) = $GUI_CHECKED) Then
+				$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_SCRAMBLE_DLL_NAME)
+			Else
+				If (BitAND($g_InjectionFlags, $INJ_SCRAMBLE_DLL_NAME)) Then
+					$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_SCRAMBLE_DLL_NAME)
+				EndIf
+			EndIf
+
+		Case $Msg = $h_C_LoadCopy
+			If (GUICtrlRead($h_C_LoadCopy) = $GUI_CHECKED) Then
+				$g_InjectionFlags = BitOR($g_InjectionFlags, $INJ_LOAD_DLL_COPY)
+			Else
+				If (BitAND($g_InjectionFlags, $INJ_LOAD_DLL_COPY)) Then
+					$g_InjectionFlags = BitXOR($g_InjectionFlags, $INJ_LOAD_DLL_COPY)
+				EndIf
+			EndIf
+
 		Case $Msg = $h_B_Inject
 			Return $GUI_INJECT
 
@@ -917,8 +1413,17 @@ Func UpdateGUI()
 		Case $Msg = $h_B_Changelog
 			ShellExecute("https://www.pastebin.com/eN7KPX3x")
 
-		Case $Msg = $h_B_Broihon
-			ShellExecute("https://i.gyazo.com/41f5d38c561eabb4d44eec1606b2cadb.jpg")
+		Case $Msg = $h_B_ToggleTips
+			If ($g_ToolTipsOn = True) Then
+				GUICtrlSetData($h_B_ToggleTips, "Enable tooltips")
+				_GUIToolTip_Deactivate($h_T_TooltipCtrl)
+				$g_ToolTipsOn = False
+			Else
+				GUICtrlSetData($h_B_ToggleTips, "Disable tooltips")
+				_GUIToolTip_Activate($h_T_TooltipCtrl)
+				$g_ToolTipsOn = True
+			EndIf
+
 
 	EndSelect
 
@@ -932,7 +1437,6 @@ Func UpdateGUI()
 		UpdateProcessIcon(0)
 		$l_ProcessDead = True
 	EndIf
-
 
 	If ($l_UpdateProcess) Then
 		UpdateTargetProcess()

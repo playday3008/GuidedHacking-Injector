@@ -1,3 +1,31 @@
+;FUNCTION LIST IN FILE ORDER:
+
+;===================================================================================================
+; Function........:  SaveSettings()
+;
+; Description.....:  Saves the settings stored in the g_ variables to file.
+;===================================================================================================
+; Function........:  SaveFiles($h_DllList)
+;
+; Description.....:  Saves the dll files listed in $h_DllList to file.
+;
+; Parameter(s)....:  $h_DllList - Handle to the listview control containing the dll files.
+;===================================================================================================
+; Function........:  ResetSettings()
+;
+; Description.....:  Resets all injection settings. This does not include the dll file list.
+;===================================================================================================
+; Function........:  LoadSettings()
+;
+; Description.....:  Loads all injection settings. This does not include the dll file list.
+;===================================================================================================
+; Function........:  LoadFiles($h_DllList)
+;
+; Description.....:  Loads the dll file list from the settings file and passes them to the listview.
+;
+; Parameter(s)....:  $h_DllList - Handle to the listview control.
+;===================================================================================================
+
 #include "Include.au3"
 
 Func SaveSettings()
@@ -14,6 +42,7 @@ Func SaveSettings()
 	IniWrite($g_ConfigPath, "CONFIG", "FLAGS", 			Number($g_InjectionFlags		))
 	IniWrite($g_ConfigPath, "CONFIG", "IGNOREUPDATES", 	Number($g_IgnoreUpdates			))
 	IniWrite($g_ConfigPath, "CONFIG", "PROCNAMEFILTER", 	  ($g_ProcNameFilter		))
+	IniWrite($g_ConfigPath, "CONFIG", "TOOLTIPSON",		Number($g_ToolTipsOn			))
 
 EndFunc   ;==>SaveSettings
 
@@ -24,7 +53,7 @@ Func SaveFiles($h_DllList)
 	$Count = _GUICtrlListView_GetItemCount($h_DllList)
 	For $i = 0 To $Count - 1 Step 1
 		$Path = _GUICtrlListView_GetItemText($h_DllList, $i, 2)
-
+		$Path &= _GUICtrlListView_GetItemText($h_DllList, $i, 3)
 		If (_GUICtrlListView_GetItemChecked($h_DllList, $i)) Then
 			$Path &= "1"
 		Else
@@ -38,7 +67,7 @@ EndFunc   ;==>SaveFiles
 
 Func ResetSettings()
 
-	FileDelete($g_ConfigPath)
+	IniDelete($g_ConfigPath, "CONFIG")
 
 	$g_Processname 			= "Broihon.exe"
 	$g_PID					= 0
@@ -52,10 +81,9 @@ Func ResetSettings()
 	$g_InjectionFlags		= 0
 	$g_IgnoreUpdates		= False
 	$g_ProcNameFilter		= ""
+	$g_ToolTipsOn			= True
 
 	SaveSettings()
-
-	IniWriteSection($g_ConfigPath, "FILES", "")
 
 EndFunc   ;==>ResetSettings
 
@@ -78,6 +106,7 @@ Func LoadSettings()
 	$g_InjectionFlags 		= Number(IniRead($g_ConfigPath, "CONFIG", "FLAGS", 			Number($g_InjectionFlags		)))
 	$g_IgnoreUpdates 		= Number(IniRead($g_ConfigPath, "CONFIG", "IGNOREUPDATES", 	Number($g_IgnoreUpdates			)))
 	$g_ProcNameFilter 		= 		(IniRead($g_ConfigPath, "CONFIG", "PROCNAMEFILTER", 	  ($g_ProcNameFilter		)))
+	$g_ToolTipsOn 			= Number(IniRead($g_ConfigPath, "CONFIG", "TOOLTIPSON", 	Number($g_ToolTipsOn			)))
 
 EndFunc   ;==>LoadSettings
 
@@ -90,17 +119,20 @@ Func LoadFiles($h_DllList)
 
 	For $i = 0 To $Files[0][0] - 1 Step 1
 
-		$Path 		= StringTrimRight($Files[$i + 1][1], 1)
-		$FileTicked = StringTrimLeft($Files[$i + 1][1], StringLen($Files[$i + 1][1]) - 1)
+		$Path 		= StringTrimRight($Files[$i + 1][1], 4)
+		$FileData	= StringTrimLeft($Files[$i + 1][1], StringLen($Files[$i + 1][1]) - 4)
+		$FileArch	= StringTrimRight($FileData, 1)
+		$FileTicked	= StringTrimLeft($FileData, 3)
 
 		If (FileExists($Path)) Then
 			Local $Split = StringSplit($Path, "\")
 			_GUICtrlListView_AddItem($h_DllList, "", $i)
 			_GUICtrlListView_AddSubItem($h_DllList, $i, $Split[$Split[0]], 1)
 			_GUICtrlListView_AddSubItem($h_DllList, $i, $Path, 2)
-			_GUICtrlListView_AddSubItem($h_DllList, $i, 0, 3)
+			_GUICtrlListView_AddSubItem($h_DllList, $i, $FileArch, 3)
+			_GUICtrlListView_AddSubItem($h_DllList, $i, 0, 4)
 
-			If ($FileTicked = "1") Then
+			If ($FileTicked = 1) Then
 				_GUICtrlListView_SetItemChecked($h_DllList, $i)
 			EndIf
 		Else

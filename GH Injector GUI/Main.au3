@@ -1,5 +1,14 @@
+;FUNCTION LIST IN FILE ORDER:
+
+;===================================================================================================
+; Function........:  Main()
+;
+; Description.....:  Main function of the injector GUI.
+;===================================================================================================
+
 #NoTrayIcon
 #RequireAdmin
+
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Icon=GH Icon.ico
 #AutoIt3Wrapper_Outfile=GH Injector.exe
@@ -12,14 +21,16 @@
 Func Main()
 
 	If (NOT FileExists(@ScriptDir & "\GH Injector - x64.exe")) Then
-		MsgBox($MB_ICONERROR, "Error", '"GH Injector - x64.exe" is missing')
-		Exit
+		;MsgBox($MB_ICONERROR, "Error", '"GH Injector - x64.exe" is missing')
+		;Exit
 	EndIf
 
 	If (NOT FileExists(@ScriptDir & "\GH Injector - x86.exe")) Then
-		MsgBox($MB_ICONERROR, "Error", '"GH Injector - x86.exe" is missing')
-		Exit
+		;MsgBox($MB_ICONERROR, "Error", '"GH Injector - x86.exe" is missing')
+		;Exit
 	EndIf
+
+	SetPrivilege($SE_DEBUG_NAME, True)
 
 	LoadSettings()
 

@@ -1,5 +1,39 @@
 #include "Import Handler.h"
-#pragma comment(lib, "Psapi.lib")
+
+BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc);
+
+bool GetImportA(HANDLE hProc, char * szDll, char * szFunc, void * &pOut)
+{
+	HINSTANCE hDll = LoadLibraryA(szDll);
+	if (!hDll)
+		return false;
+
+	BYTE * pFunc = GetProcAddressA(hDll, szFunc);
+	if (!pFunc)
+		return false;
+	
+	MODULEENTRY32 ME32{ 0 };
+	ME32.dwSize = sizeof(ME32);
+
+	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetProcessId(hProc));
+	BOOL bRet = Module32First(hSnap, &ME32);
+	while (bRet)
+	{
+		if (!_stricmp(ME32.szModule, szDll))
+			break;
+
+		bRet = Module32Next(hSnap, &ME32);
+	}
+	CloseHandle(hSnap);
+
+	if (!bRet)
+		return false;
+
+	auto delta = reinterpret_cast<BYTE*>(ME32.hModule) - reinterpret_cast<BYTE*>(hDll);
+	pOut = pFunc + delta;
+	
+	return true;
+}
 
 BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc)
 {
@@ -18,7 +52,7 @@ BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc)
 
 	if (reinterpret_cast<UINT_PTR>(szFunc) <= MAXWORD)
 	{
-		WORD Base = LOWORD(pExportDir->Base - 1);
+		WORD Base		= LOWORD(pExportDir->Base - 1);
 		WORD Ordinal	= LOWORD(szFunc) - Base;
 		DWORD FuncRVA	= reinterpret_cast<DWORD*>(pBase + pExportDir->AddressOfFunctions)[Ordinal];
 
@@ -71,7 +105,7 @@ BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc)
 	if (!Ordinal)
 		return nullptr;
 
-	DWORD FuncRVA	= reinterpret_cast<DWORD*>(pBase + pExportDir->AddressOfFunctions)[Ordinal];
+	DWORD FuncRVA = reinterpret_cast<DWORD*>(pBase + pExportDir->AddressOfFunctions)[Ordinal];
 
 	if (FuncRVA >= DirRVA && FuncRVA < DirRVA + ExportSize)
 	{
@@ -96,121 +130,4 @@ BYTE * GetProcAddressA(HINSTANCE hDll, char * szFunc)
 	}
 
 	return pBase + FuncRVA;
-}
-
-bool GetImportA(HANDLE hProc, char * szDll, char * szFunc, void * &pOut)
-{
-	HINSTANCE hDll = GetModuleHandleA(szDll);
-	if (!hDll)
-		return false;
-
-	void * pFunc1 = GetProcAddress(hDll, szFunc);
-	void * pFunc2 = GetProcAddressA(hDll, szFunc);
-
-	if (!pFunc1 && !pFunc2)
-	{
-		pOut = nullptr;
-		return false;
-	}
-	else if (!pFunc1)
-	{
-		pOut = pFunc2;
-		return true;
-	}
-	else if(!pFunc2)
-	{
-		pOut = pFunc1;
-		return true;
-	}
-
-	if (pFunc1 != pFunc2)
-	{
-		BYTE * pBase1 = (BYTE*)pFunc1;
-		BYTE * pBase2 = (BYTE*)pFunc2;
-
-		HINSTANCE hNew = NULL;
-		char pBuffer[MAX_PATH]{ 0 };
-
-		if (AddressToModuleBase(GetCurrentProcess(), pBase1))
-		{
-			hNew = reinterpret_cast<HINSTANCE>(pBase1);
-			if (GetModuleBaseNameA(hProc, hNew, pBuffer, MAX_PATH))
-			{
-				pOut = pFunc1;
-				return true;
-			}
-		}
-		
-		if (AddressToModuleBase(GetCurrentProcess(), pBase2))
-		{
-			hNew = reinterpret_cast<HINSTANCE>(pBase2);
-			if (GetModuleBaseNameA(hProc, hNew, pBuffer, MAX_PATH))
-			{
-				pOut = pFunc2;
-				return true;
-			}
-		}
-		
-		pOut = nullptr;
-		return false;
-	}
-	
-	pOut = pFunc1;
-	
-	return true;
-}
-
-bool AddressToModuleBase(HANDLE hProc, BYTE * &pAddress)
-{
-	auto p_NtQueryVirtualMemory = reinterpret_cast<f_NtQueryVirtualMemory>(GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryVirtualMemory"));
-
-	SECTION_INFO section_info;
-	NTSTATUS ntRet = p_NtQueryVirtualMemory(hProc, pAddress, MemoryMappedFilenameInformation, &section_info, sizeof(section_info), nullptr);
-	if (NT_FAIL(ntRet))
-		return false;	
-
-	wchar_t * pDeviceName	= section_info.szData;
-	wchar_t * pFilePath		= pDeviceName;
-	
-	while (*(pFilePath++) != '\\');
-	while (*(pFilePath++) != '\\');
-	while (*(pFilePath++) != '\\');
-	*(pFilePath - 1) = 0;
-
-	wchar_t * DriveLetters = new wchar_t[MAX_PATH + 1];
-	auto size = GetLogicalDriveStringsW(MAX_PATH, DriveLetters);
-	if (size > MAX_PATH)
-	{
-		delete[] DriveLetters;
-		DriveLetters = new wchar_t[size + 1];
-		size = GetLogicalDriveStringsW(size, DriveLetters);
-	}
-
-	for (DWORD i = 0; i != size / 4; ++i)
-	{
-		DriveLetters[i * 4 + 2] = 0;
-		wchar_t Buffer[64]{ 0 };
-
-		QueryDosDeviceW(&DriveLetters[i * 4], Buffer, sizeof(Buffer));
-		if (!wcscmp(Buffer, pDeviceName))
-		{
-			pFilePath -= 3;
-			pFilePath[2] = '\\';
-			pFilePath[1] = ':';
-			pFilePath[0] = DriveLetters[i * 4];
-
-			delete[] DriveLetters;
-
-			BYTE * Ret = reinterpret_cast<BYTE*>(GetModuleHandleW(pFilePath));
-			if (!Ret)
-				return false;
-
-			pAddress = Ret;
-			return true;
-		}
-	}
-	
-	delete[] DriveLetters;
-
-	return false;
 }

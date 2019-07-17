@@ -1,3 +1,11 @@
+;FUNCTION LIST IN FILE ORDER:
+
+;===================================================================================================
+; Function........:  Update()
+;
+; Description.....:  Checks for a newer version and updates if desired.
+;===================================================================================================
+
 #include "Include.au3"
 
 Func Update()

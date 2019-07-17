@@ -1,5 +1,78 @@
+;FUNCTION LIST IN FILE ORDER:
+
+;===================================================================================================
+; Function........:  SetPrivilege($PrivilegeName, $bEnable)
+;
+; Description.....:  Enables/Disables a privilege for the current process.
+;
+; Parameter(s)....:  $PrivilegeName - Name of the privilege
+;					 $bEnable		- True to enable and false to disable the privilege.
+;===================================================================================================
+; Function........:  GetSessionId($hTargetProcess)
+;
+; Description.....:  Retrieves the session identifier of the specified process.
+;
+; Parameter(s)....:  $hTargetProcess - Handle to the target process. This handle must have the
+;										PROCESS_QUERY_LIMITED_INFORMATION access right.
+;
+; Return Value(s).;  On Success - The session identifier of the process.
+;					 On Failure - -1 to indicate an invalid session identifier.
+;===================================================================================================
+; Function........:  GetProcessExePath($hProc)
+;
+; Description.....:  Retrieves the absolute path to the exe file on disk of a process.
+;
+; Parameter(s)....:  $hTargetProcess - Handle to the target process. This handle must have the
+;										PROCESS_QUERY_LIMITED_INFORMATION access right.
+;
+; Return Value(s).;  On Success - A string containing the file path.
+;					 On Failure - An empty string.
+;===================================================================================================
+; Function........:  ListProcesses($h_L_Processes, $Mode, $CurrentSessionOnly, $Filter)
+;
+; Description.....:  Lists currently running processes in a list view using CreateToolHelp32Snapshot
+;						(ExeIcon, ProcessId, ExeFileName, Architecture)
+;
+; Parameter(s)....:  $h_L_Processes 		- Handle to the listview control.
+;					 $Mode					- Defines the column used for sorting (1 - 3)
+;					 $CurrentSessionOnly 	- If true processes from other sessions
+;												are excluded from the list.
+;					 $Filter				- A substring used to filter the list by ExeFileNames.
+;===================================================================================================
+; Function........:  PP_GUI_WM_NOTIFY($hwnd, $uMsg, $wParam, $lParam)
+;
+; Description.....:  WM_NOTIFY wndProc of the ProcessPicker GUI. Handles doubleclicks on items
+;						in the listview.
+;
+; Parameter(s)....:  normal wndProc arguments
+;
+; Return Value(s).;  Calls AutoIt's internal handler by returning $GUI_RUNDEFMSG.
+;===================================================================================================
+; Function........:  PP_LV_SubclassProc($hWnd, $uMsg, $wParam, $lParam)
+;
+; Description.....:  A subclass procedure to filter messages to the listview. This allows using
+;						'ENTER' and 'SPACE' to select a process. This is a much cleaner method
+;						than using GuiCtrlCreateDummy and GUISetAccelerators.
+;
+; Parameter(s)....:  normal SubClassProc arguments
+;
+; Return Value(s).:  Forwards the call to DefSubclassProc.
+;===================================================================================================
+; Function........:  CreateProcessList()
+;
+; Description.....:  Creates a GUI in which all currently running processes are listed.
+;
+; Return Value(s).;  On Success - The process identifier of the selected process.
+;					 On Failure - -1 to imply an invalid process identifier.
+;===================================================================================================
+
 #include "Include.au3"
 #include "Misc.au3"
+#include "Architecture.au3"
+
+#Region Global Definitions
+Global Const $VK_RETURN = 0x0D
+Global Const $VK_SPACE 	= 0x20
 
 Global Const $TH32CS_SNAPPROCESS 		= 0x00000002
 Global Const $ProcessSessionInformation = 24
@@ -19,9 +92,9 @@ Global Const $PROCESSENTRY32 = _
 	"endstruct								"
 
 Global Const $PROCESS_SESSION_INFORMATION = _
-	"struct;			" & _
-		"UINT SessionId	" & _
-	"endstruct			"
+	"struct;				" & _
+		"ULONG SessionId;	" & _
+	"endstruct				"
 
 Global $l_SortSense = [False, False, False]
 
@@ -31,6 +104,27 @@ $l_L_DoubleClickedIndex 	= -1
 $l_ProcListX 				= -1
 $l_ProcListY 				= -1
 Local $hImageList			= 0
+
+$h_G_Select = 0
+
+#EndRegion
+
+Func SetPrivilege($PrivilegeName, $bEnable)
+
+	Local $hToken = _Security__OpenProcessToken(_WinAPI_GetCurrentProcess(), $TOKEN_ALL_ACCESS)
+	If NOT $hToken Then
+		MsgBox($MB_ICONWARNING, "OpenProcessToken failed", "Couldn't enable debug privileges which might affect the functionality of the GH Injector.")
+		Return
+	EndIf
+
+	If (NOT _Security__SetPrivilege($hToken, $SE_DEBUG_NAME, $bEnable)) Then
+	    _WinAPI_CloseHandle($hToken)
+		MsgBox($MB_ICONWARNING, "SetPrivilege failed", "Couldn't enable debug privileges which might affect the functionality of the GH Injector.")
+	EndIf
+
+	_WinAPI_CloseHandle($hToken)
+
+EndFunc   ;==>SetPrivilege
 
 Func GetSessionId($hTargetProcess)
 
@@ -54,45 +148,6 @@ Func GetSessionId($hTargetProcess)
 
 EndFunc   ;==>GetSessionId
 
-Func Is64BitProcess($hTargetProcess)
-
-	$bIs64BitWin = False
-
-	$bOut = False
-	Local $bRet = DllCall("kernel32.dll", _
-		"BOOL", "IsWow64Process", _
-			"HANDLE", 	-1, _
-			"BOOL*", 	$bOut _
-	)
-
-	If (NOT IsArray($bRet) OR ($bRet[0] = 0)) Then
-		Return 0
-	EndIf
-
-	$bOut = $bRet[2]
-	If ($bOut <> 0) Then
-		$bIs64BitWin = True
-	EndIf
-
-	Local $bRet = DllCall("kernel32.dll", _
-		"BOOL", "IsWow64Process", _
-			"HANDLE", 	$hTargetProcess, _
-			"BOOL*", 	$bOut _
-	)
-
-	If (NOT IsArray($bRet) OR ($bRet[0] = 0)) Then
-		Return 0
-	EndIf
-
-	$bOut = $bRet[2]
-	If ($bIs64BitWin AND NOT $bOut) Then
-		Return True
-	EndIf
-
-	Return False
-
-EndFunc   ;==>Is64BitProcess
-
 Func GetProcessExePath($hProc)
 
 	$ret = DllCall("kernel32.dll", _
@@ -115,6 +170,8 @@ Func GetProcessExePath($hProc)
 EndFunc   ;==>GetProcessExePath
 
 Func ListProcesses($h_L_Processes, $Mode, $CurrentSessionOnly, $Filter)
+
+	SetPrivilege($SE_DEBUG_NAME, True)
 
 	_GUICtrlListView_DeleteAllItems($h_L_Processes)
 
@@ -181,9 +238,6 @@ Func ListProcesses($h_L_Processes, $Mode, $CurrentSessionOnly, $Filter)
 
 		If (NOT IsArray($hProc_info) OR ($hProc_info[0] = 0)) Then
 			$ProcessData[$Count][3] = 0
-			If ($CurrentSessionOnly = 0) Then
-				$Count += 1
-			EndIf
 			ContinueLoop
 		EndIf
 
@@ -262,36 +316,46 @@ Func ListProcesses($h_L_Processes, $Mode, $CurrentSessionOnly, $Filter)
 
 EndFunc   ;==>ListProcesses
 
-Func WM_NOTIFY_ProcessPicker($hwnd, $uMsg, $wParam, $lParam)
+Func PP_GUI_WM_NOTIFY($hWnd, $uMsg, $wParam, $lParam)
 
 	$tNMHDR = DllStructCreate($tagNMHDR, $lParam)
 
-	$hListView = $l_h_L_ProcList
-	If (NOT IsHWnd($hListView)) Then
-		$hListView = GUICtrlGetHandle($l_h_L_ProcList)
-	EndIf
-
-	If (HWnd($tNMHDR.hwndFrom) = $hListView) Then
+	If (HWnd($tNMHDR.hwndFrom) = $l_h_L_ProcList) Then
 		If ($tNMHDR.code = $NM_DBLCLK) Then
 			$tInfo = DllStructCreate($tagNMITEMACTIVATE, $lParam)
 			$l_L_DoubleClickedIndex = $tInfo.Index
-
-			Return 0
-		EndIf
+	    EndIf
 	EndIf
 
 	Return $GUI_RUNDEFMSG
 
-EndFunc   ;==>WM_NOTIFY_ProcessPicker
+EndFunc   ;==>PP_GUI_WM_NOTIFY
+
+Func PP_LV_SubclassProc($hWnd, $uMsg, $wParam, $lParam, $iID, $pData)
+
+   If ($hWnd = $l_h_L_ProcList) Then
+	  If($uMsg = $WM_GETDLGCODE) Then
+		 If ($wParam = $VK_RETURN OR $wParam = $VK_SPACE) Then
+			$sel_index = _GUICtrlListView_GetSelectedIndices($l_h_L_ProcList, True)
+			If (UBound($sel_index) AND ($sel_index[0] <> 0)) Then
+			   $l_L_DoubleClickedIndex = $sel_index[1]
+			EndIf
+		 EndIf
+	  EndIf
+   EndIf
+
+   Return DllCall("Comctl32.dll", "lresult", "DefSubclassProc", "hwnd", $hWnd, "uint", $uMsg, "wparam", $wParam, "lparam", $lParam)[0]
+
+EndFunc   ;==>WndProc_ProcessPicker
 
 Func CreateProcessList()
 
 	$Width 		= 270
 	$lHeight 	= 385
 
-	$h_Select = GUICreate("Select a process (0)", $Width, $lHeight, $l_ProcListX, $l_ProcListY, BitXOR($GUI_SS_DEFAULT_GUI, $WS_MINIMIZEBOX), $WS_EX_TOPMOST)
+	$h_G_Select = GUICreate("Select a process (0)", $Width, $lHeight, $l_ProcListX, $l_ProcListY, BitXOR($GUI_SS_DEFAULT_GUI, $WS_MINIMIZEBOX), $WS_EX_TOPMOST)
 	$h_L_List = GUICtrlCreateListView("|PID|Name|Type", 0, 0, $Width, $lHeight - 80, -1, BitOR($LVS_EX_GRIDLINES, $LVS_EX_FULLROWSELECT, $LVS_EX_SUBITEMIMAGES))
-	$l_h_L_ProcList = $h_L_List
+	$l_h_L_ProcList = GUICtrlGetHandle($h_L_List)
 
 	_GUICtrlListView_SetColumnWidth($h_L_List, 0, $Width / 12)
 	_GUICtrlListView_SetColumnWidth($h_L_List, 1, $Width / 6)
@@ -306,7 +370,11 @@ Func CreateProcessList()
 	$h_B_Refresh 			= GUICtrlCreateButton("Refresh", 5, $lHeight - 22, $Width - 180, 17)
 
 	$ProcessCount 			= ListProcesses($h_L_List, 1, 1, $g_ProcNameFilter)
-	WinSetTitle($h_Select, "", "Select a process (" & $ProcessCount & ")")
+	WinSetTitle($h_G_Select, "", "Select a process (" & $ProcessCount & ")")
+
+    $h_PP_LV_SubclassProc 	= DllCallbackRegister("PP_LV_SubclassProc", 'lresult', 'hwnd;uint;wparam;lparam;uint_ptr;dword_ptr')
+	$ph_PP_LV_SubclassProc 	= DllCallbackGetPtr($h_PP_LV_SubclassProc)
+	_WinAPI_SetWindowSubclass(GUICtrlGetHandle($h_L_List), $ph_PP_LV_SubclassProc, 2, 0)
 
 	GUISetState(@SW_SHOW)
 
@@ -315,10 +383,8 @@ Func CreateProcessList()
 	$UpdateListFromMask = False
 	$TempPrcoNameFilter = $g_ProcNameFilter
 
-	$h_User32 = DllOpen("user32.dll")
-
 	_WinAPI_SetFocus(GUICtrlGetHandle($h_I_ProcFilter))
-	ControlSend($h_Select, "", $h_I_ProcFilter, "{END}")
+	ControlSend($h_G_Select, "", $h_I_ProcFilter, "{END}")
 
 	While (True)
 		Sleep(5)
@@ -328,7 +394,7 @@ Func CreateProcessList()
 			$UpdateListFromMask = True
 		EndIf
 
-		$Msg = GUIGetMsg($h_Select)
+		$Msg = GUIGetMsg($h_G_Select)
 		Select
 			Case $Msg = $GUI_EVENT_CLOSE
 				$lPID = -1
@@ -368,20 +434,20 @@ Func CreateProcessList()
 				If ($ClickedCol <> 0) Then
 					$bSession = (BitAND(GUICtrlRead($h_C_CurrSession), $GUI_CHECKED) <> 0)
 					$ProcessCount = ListProcesses($h_L_List, $ClickedCol - 1, $bSession, $g_ProcNameFilter)
-					WinSetTitle($h_Select, "", "Select a process (" & $ProcessCount & ")")
+					WinSetTitle($h_G_Select, "", "Select a process (" & $ProcessCount & ")")
 				EndIf
 
 			Case $Msg = $h_C_CurrSession
 				$bSession = (BitAND(GUICtrlRead($h_C_CurrSession), $GUI_CHECKED) <> 0)
 				$l_SortSense[1] = False
 				$ProcessCount = ListProcesses($h_L_List, 1, $bSession, $g_ProcNameFilter)
-				WinSetTitle($h_Select, "", "Select a process (" & $ProcessCount & ")")
+				WinSetTitle($h_G_Select, "", "Select a process (" & $ProcessCount & ")")
 
 			Case $Msg = $h_B_Refresh
 				$bSession = (BitAND(GUICtrlRead($h_C_CurrSession), $GUI_CHECKED) <> 0)
 				$l_SortSense[1] = False
 				$ProcessCount = ListProcesses($h_L_List, 1, $bSession, $g_ProcNameFilter)
-				WinSetTitle($h_Select, "", "Select a process (" & $ProcessCount & ")")
+				WinSetTitle($h_G_Select, "", "Select a process (" & $ProcessCount & ")")
 
 			Case $UpdateListFromMask = True
 				$UpdateListFromMask = False
@@ -389,29 +455,12 @@ Func CreateProcessList()
 				$bSession = (BitAND(GUICtrlRead($h_C_CurrSession), $GUI_CHECKED) <> 0)
 				$l_SortSense[1] = False
 				$ProcessCount = ListProcesses($h_L_List, 1, $bSession, $g_ProcNameFilter)
-				WinSetTitle($h_Select, "", "Select a process (" & $ProcessCount & ")")
+				WinSetTitle($h_G_Select, "", "Select a process (" & $ProcessCount & ")")
 
-			Case _IsPressed("0D", $h_User32)
-				Local $Index = _GUICtrlListView_GetSelectedIndices($h_L_List, True)
-				If ($Index[0] = 0) Then
-					ContinueLoop
-				EndIf
-
-				$lPID 		= _GUICtrlListView_GetItemText($h_L_List, $Index[1], 1)
-				$lProcArch 	= _GUICtrlListView_GetItemText($h_L_List, $Index[1], 3)
-				If ($lProcArch = "---") Then
-					MsgBox(BitOR($MB_ICONERROR, $MB_TOPMOST), "Error", "Can't attach to process.")
-					ContinueLoop
-				EndIf
-
-				ExitLoop
-
-		EndSelect
+		 EndSelect
 	WEnd
 
-	DllClose($h_User32)
-
-	Local $Pos = WinGetPos($h_Select)
+	Local $Pos = WinGetPos($h_G_Select)
 	If (IsArray($Pos)) Then
 		$ProcListX = $Pos[0]
 		$ProcListY = $Pos[1]
@@ -419,8 +468,11 @@ Func CreateProcessList()
 
 	_GUIImageList_Destroy($hImageList)
 
+    _WinAPI_RemoveWindowSubclass(GUICtrlGetHandle($h_L_List), $ph_PP_LV_SubclassProc, 2)
+	DllCallbackFree($h_PP_LV_SubclassProc)
+
 	GUISetState(@SW_HIDE)
-	GUIDelete($h_Select)
+	GUIDelete($h_G_Select)
 
 	$l_SortSense[1] = False
 

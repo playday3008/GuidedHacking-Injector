@@ -1,7 +1,35 @@
+;FUNCTION LIST IN FILE ORDER:
+
+;===================================================================================================
+; Function........:  InjectDll($DllPath, $PID, $Is64BitProcess)
+;
+; Description.....:  Wrapperfunction to call the actual injector.
+;
+; Parameter(s)....:  $DllPath 			- A file handle or absolute path to the file.
+;					 $PID				- The process identifier of the target process.
+;					 $Is64BitProcess	- True if the process defined by $PID is a 64bit process
+;===================================================================================================
+; Function........:  Inject()
+;
+; Description.....:  Wrapperfunction to call the InjectDll function. Does some checks then forwards
+;						all paths to the InjectDll function.
+;===================================================================================================
+; Function........:  PreInject()
+;
+; Description.....:  Verifies stuff and executes wait time before starting the injection process.
+;
+; Return Value(s).:  On Success - Returns true. Injection can continue.
+;                    On Failure - Returns false. Injection can't continue.
+;===================================================================================================
+
 #include "GUI.au3"
+
+#Region Global Definitions
 
 Global $ToInject[32] = ["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""]
 Global $DllCount = 0
+
+#EndRegion
 
 Func InjectDll($DllPath, $PID, $Is64BitProcess)
 
@@ -45,6 +73,13 @@ Func Inject()
 
 	For $i = 0 To $DllCount - 1 Step 1
 		InjectDll(_GUICtrlListView_GetItemText($h_L_Dlls, $ToInject[$i], 2), $g_PID, $x64)
+	Next
+
+	For $i = 0 To $DllCount - 1 Step 1
+		$Platform = _GUICtrlListView_GetItemText($h_L_Dlls, $ToInject[$i], 3)
+		If ((StringCompare($Platform, "x64") AND $x64) OR (StringCompare($Platform, "x86") AND NOT $x64)) Then
+			InjectDll(_GUICtrlListView_GetItemText($h_L_Dlls, $ToInject[$i], 2), $g_PID, $x64)
+		EndIf
 	Next
 
 	$DllCount 			= 0
