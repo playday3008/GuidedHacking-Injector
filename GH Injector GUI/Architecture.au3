@@ -1,4 +1,4 @@
-;FUNCTION LIST IN FILE ORDER:
+#Region ;FUNCTION LIST IN FILE ORDER:
 
 ;===================================================================================================
 ; Function........:  GetDosHeader($hFile)
@@ -37,24 +37,26 @@
 ;===================================================================================================
 ; Function........:  Is64BitProcess($hTargetProcess)
 ;
-; Description.....:  Determines whether a process is a 64bit process or not.
+; Description.....:  Determines whether a process is a 64-bit process or not.
 ;
 ; Parameter(s)....:  $hTargetProcess	- A handle to the target process. This handle must have
 ;											the PROCESS_QUERY_LIMITED_INFORMATION access right.
 ;
-; Return Value(s).:  On Success - Returns true (process is x64) or false (process is not x64).
-;                    On Failure - Returns 0.
+; Return Value(s).:  On Success - Returns 1 (process is x64) or 0 (process is not x64).
+;                    On Failure - Returns -1 (unable to determine process architecture).
 ;===================================================================================================
-; Function........:  GetProcessArch($PID)
+; Function........:  GetProcessArchitecture($PID)
 ;
 ; Description.....:  Returns the architecture of a process as a platform string (VS Style).
 ;
-; Parameter(s)....:  $PID	- The process identifier of the process. This function will try to open
-;								a process handle with PROCESS_QUERY_LIMITED_INFORMATION.
+; Parameter(s)....:  $PID	- The process identifier of the process. This function will try to
+;								open a process handle with PROCESS_QUERY_LIMITED_INFORMATION.
 ;
 ; Return Value(s).:  On Success - Returns either "x64" or "x86" depending on the architecture.
-;                    On Failure - Returns "---".
+;                    On Failure - Returns 0(unable to determine process architecture).
 ;===================================================================================================
+
+#EndRegion
 
 #include <WinAPI.au3>
 #include <WinAPIEx.au3>
@@ -158,32 +160,31 @@ EndFunc   ;==>GetNTHeader
 
 Func Is64BitProcess($hTargetProcess)
 
-	If (NOT @AutoItX64) Then
-		Return 0
-	EndIf
-
-	$bOut = False
+	$ProcessMachineName = 0
+	$NativeMachineName 	= 0
 	Local $bRet = DllCall("kernel32.dll", _
-		"BOOL", "IsWow64Process", _
+		"BOOL", "IsWow64Process2", _
 			"HANDLE", 	$hTargetProcess, _
-			"BOOL*", 	$bOut _
+			"USHORT*", 	$ProcessMachineName, _
+			"USHORT*", 	$NativeMachineName _
 	)
 
 	If (NOT IsArray($bRet) OR ($bRet[0] = 0)) Then
 		Return -1
 	EndIf
 
-	$bOut = $bRet[2]
+	$ProcessMachineName = $bRet[2]
+	$NativeMachineName = $bRet[3]
 
-	If ($bOut <> 0) Then
-		Return 0
+	If ($ProcessMachineName = $IMAGE_FILE_MACHINE_UNKNOWN AND $NativeMachineName = $IMAGE_FILE_MACHINE_AMD64) Then
+		Return 1
 	EndIf
 
-	Return 1
+	Return 0
 
 EndFunc   ;==>Is64BitProcess
 
-Func GetProcessArch($PID)
+Func GetProcessArchitecture($PID)
 
 	$hProc_info = DllCall("kernel32.dll", _
 		"HANDLE", "OpenProcess", _
@@ -211,4 +212,4 @@ Func GetProcessArch($PID)
 		Return 0
 	EndIf
 
-EndFunc   ;==>GetProcessArch
+EndFunc   ;==>GetProcessArchitecture

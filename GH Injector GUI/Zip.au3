@@ -1,6 +1,10 @@
-#include <Array.au3>
+#include <Include.au3>
 
 ; Full credits to torels_ (https://www.autoitscript.com/forum/topic/73425-zipau3-udf-in-pure-autoit/)
+;
+; Edit at line  1: changed include from "Array.au3" to "Include.au3" (which includes "Array.au3")
+; Edit at line 31: put true in curved brackets
+; Edit at line 36: decreased sleep time from 500 to 50
 
 Func _Zip_UnzipAll($hZipFile, $hDestPath)
 
@@ -17,19 +21,19 @@ Func _Zip_UnzipAll($hZipFile, $hDestPath)
 	EndIf
 
 	Local $aArray[1]
-	$oApp = ObjCreate("Shell.Application")
+	Local $oApp = ObjCreate("Shell.Application")
 	$oApp.Namespace($hDestPath).CopyHere($oApp.Namespace($hZipFile).Items)
 
 	For $item In $oApp.Namespace($hZipFile).Items
 		_ArrayAdd($aArray, $item)
 	Next
 
-	While True
+	While (True)
 		_Hide()
 		If (FileExists($hDestPath & "\" & $aArray[UBound($aArray) - 1])) Then
 			ExitLoop
 		EndIf
-		Sleep(500)
+		Sleep(50)
 	WEnd
 
 EndFunc

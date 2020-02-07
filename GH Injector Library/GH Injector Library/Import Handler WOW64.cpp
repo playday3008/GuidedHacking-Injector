@@ -1,56 +1,75 @@
+#include "pch.h"
+
 #ifdef _WIN64
 
 #include "Import Handler.h"
 
-#ifdef UNICODE
-#undef Module32First
-#undef Module32Next
-#undef MODULEENTRY32
-#endif
-
-HINSTANCE GetModuleHandleExA_WOW64(HANDLE hProc, const char * szDll)
+HINSTANCE GetModuleHandleEx_WOW64(HANDLE hTargetProc, const TCHAR * lpModuleName)
 {
 	MODULEENTRY32 ME32{ 0 };
 	ME32.dwSize = sizeof(ME32);
 	
-	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE32 | TH32CS_SNAPMODULE, GetProcessId(hProc));
+	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE32 | TH32CS_SNAPMODULE, GetProcessId(hTargetProc));
 	if (hSnap == INVALID_HANDLE_VALUE)
 	{
 		while (GetLastError() == ERROR_BAD_LENGTH)
 		{
-			hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE32 | TH32CS_SNAPMODULE, GetProcessId(hProc));
+			hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE32 | TH32CS_SNAPMODULE, GetProcessId(hTargetProc));
 		
 			if (hSnap != INVALID_HANDLE_VALUE)
 				break;
 		}
 	}
-		
-	BOOL bRet = Module32First(hSnap, &ME32);
-	while (bRet)
+	
+	if (hSnap == INVALID_HANDLE_VALUE || !hSnap)
 	{
-		if (!_stricmp(ME32.szModule, szDll) && ME32.modBaseAddr < reinterpret_cast<BYTE*>(0x7FFFFFFF))
-			break;
-		bRet = Module32Next(hSnap, &ME32);
+		return NULL;
 	}
+	   		
+	BOOL bRet = Module32First(hSnap, &ME32);
+	do
+	{
+		if (!_tcsicmp(ME32.szModule, lpModuleName) && (ME32.modBaseAddr < (BYTE*)0x7FFFF000))
+			break;
+
+		bRet = Module32Next(hSnap, &ME32);
+	} while (bRet);
+	
 	CloseHandle(hSnap);
 
 	if (!bRet)
+	{
 		return NULL;
+	}
 
 	return ME32.hModule;
 }
 
-bool GetProcAddressA_WOW64(HANDLE hProc, HINSTANCE hDll, const char * szFunc, void * &pOut)
+bool GetProcAddressEx_WOW64(HANDLE hTargetProc, const TCHAR * szModuleName, const char * szProcName, void * &pOut)
 {
+	return GetProcAddressEx_WOW64(hTargetProc, GetModuleHandleEx_WOW64(hTargetProc, szModuleName), szProcName, pOut);
+}
+
+bool GetProcAddressEx_WOW64(HANDLE hTargetProc, HINSTANCE hModule, const char * szProcName, void * &pOut)
+{
+	BYTE * modBase = ReCa<BYTE*>(hModule);
+
+	if (!modBase)
+		return false;
+
+	BYTE * pe_header = new BYTE[0x1000];
+	if (!pe_header)
+		return false;
+
 	BYTE * pBuffer = new BYTE[0x1000];
-	if (!ReadProcessMemory(hProc, reinterpret_cast<void*>(hDll), pBuffer, 0x1000, nullptr))
+	if (!ReadProcessMemory(hTargetProc, modBase, pBuffer, 0x1000, nullptr))
 	{
 		delete[] pBuffer;
 
 		return false;
 	}
 
-	auto * pNT = reinterpret_cast<IMAGE_NT_HEADERS32*>(reinterpret_cast<IMAGE_DOS_HEADER*>(pBuffer)->e_lfanew + pBuffer);
+	auto * pNT = ReCa<IMAGE_NT_HEADERS32*>(ReCa<IMAGE_DOS_HEADER*>(pBuffer)->e_lfanew + pBuffer);
 	auto * pDir = &pNT->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
 	auto ExportSize = pDir->Size;
 	auto DirRVA		= pDir->VirtualAddress;
@@ -63,8 +82,8 @@ bool GetProcAddressA_WOW64(HANDLE hProc, HINSTANCE hDll, const char * szFunc, vo
 	}
 
 	BYTE * pExpDirBuffer = new BYTE[ExportSize];
-	auto * pExportDir = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(pExpDirBuffer);
-	if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(hDll) + DirRVA, pExpDirBuffer, ExportSize, nullptr))
+	auto * pExportDir = ReCa<IMAGE_EXPORT_DIRECTORY*>(pExpDirBuffer);
+	if (!ReadProcessMemory(hTargetProc, modBase + DirRVA, pExpDirBuffer, ExportSize, nullptr))
 	{
 		delete[] pExpDirBuffer;
 		delete[] pBuffer;
@@ -74,40 +93,53 @@ bool GetProcAddressA_WOW64(HANDLE hProc, HINSTANCE hDll, const char * szFunc, vo
 
 	BYTE * pBase = pExpDirBuffer - DirRVA;
 
-	auto Forwarded = [&](DWORD FuncRVA) -> BYTE*
+	auto Forward = [&](DWORD FuncRVA, void * &pForwarded) -> bool
 	{
 		char pFullExport[MAX_PATH]{ 0 };
-		auto len_out = strlen(reinterpret_cast<char*>(pBase + FuncRVA));
-		if (!len_out)
-			return nullptr;
+		size_t len_out = 0;
 
-		memcpy(pFullExport, reinterpret_cast<char*>(pBase + FuncRVA), len_out);
+		StringCchLengthA(ReCa<char*>(pBase + FuncRVA), sizeof(pFullExport), &len_out);
+		if (!len_out)
+			return false;
+
+		StringCchCopyA(pFullExport, len_out, ReCa<char*>(pBase + FuncRVA));
+		
 		char * pFuncName = strchr(pFullExport, '.');
 		*pFuncName++ = '\0';
 		if (*pFuncName == '#')
-			pFuncName = reinterpret_cast<char*>(LOWORD(atoi(++pFuncName)));
+			pFuncName = ReCa<char*>(LOWORD(atoi(++pFuncName)));
 
-		void * pOut = nullptr;
-		GetProcAddressA_WOW64(hProc, GetModuleHandleExA(hProc, pFullExport), pFuncName, pOut);
-		return reinterpret_cast<BYTE*>(pOut);
+#ifdef UNICODE
+
+		TCHAR ModNameW[MAX_PATH + 1]{ 0 };
+		size_t SizeOut = 0;
+
+		if (mbstowcs_s(&SizeOut, ModNameW, pFullExport, MAX_PATH))
+			return GetProcAddressEx_WOW64(hTargetProc, ModNameW, pFuncName, pForwarded);
+		else
+			return false;
+#else
+
+		return GetProcAddressEx_WOW64(hTargetProc, pFullExport, pFuncName, pForwarded);
+
+#endif
 	};
 
-	if (reinterpret_cast<UINT_PTR>(szFunc) <= MAXWORD)
+	if (ReCa<ULONG_PTR>(szProcName) <= MAXWORD)
 	{
 		WORD Base		= LOWORD(pExportDir->Base - 1);
-		WORD Ordinal	= LOWORD(szFunc) - Base;
-		DWORD FuncRVA	= reinterpret_cast<DWORD*>(pBase + pExportDir->AddressOfFunctions)[Ordinal];
+		WORD Ordinal	= LOWORD(szProcName) - Base;
+		DWORD FuncRVA	= ReCa<DWORD*>(pBase + pExportDir->AddressOfFunctions)[Ordinal];
 
 		delete[] pExpDirBuffer;
 		delete[] pBuffer;
 
 		if (FuncRVA >= DirRVA && FuncRVA < DirRVA + ExportSize)
 		{
-			pOut = (BYTE*)Forwarded(FuncRVA);
-			return (pOut != nullptr);
+			return Forward(FuncRVA, pOut);
 		}
 			
-		pOut = reinterpret_cast<BYTE*>(hDll) + FuncRVA;
+		pOut = modBase + FuncRVA;
 		
 		return true;
 	}
@@ -118,19 +150,19 @@ bool GetProcAddressA_WOW64(HANDLE hProc, HINSTANCE hDll, const char * szFunc, vo
 
 	while (min <= max)
 	{
-		DWORD mid = (min + max) >> 1;
+		DWORD mid = (min + max) / 2;
 
-		DWORD CurrNameRVA	= reinterpret_cast<DWORD*>(pBase + pExportDir->AddressOfNames)[mid];
-		char * szName		= reinterpret_cast<char*>(pBase + CurrNameRVA);
+		DWORD CurrNameRVA	= ReCa<DWORD*>(pBase + pExportDir->AddressOfNames)[mid];
+		char * szName		= ReCa<char*>(pBase + CurrNameRVA);
 
-		int cmp = strcmp(szName, szFunc);
+		int cmp = strcmp(szName, szProcName);
 		if (cmp < 0)
 			min = mid + 1;
 		else if (cmp > 0)
 			max = mid - 1;
 		else 
 		{
-			Ordinal = reinterpret_cast<WORD*>(pBase + pExportDir->AddressOfNameOrdinals)[mid];
+			Ordinal = ReCa<WORD*>(pBase + pExportDir->AddressOfNameOrdinals)[mid];
 			break;
 		}
 	}
@@ -143,18 +175,17 @@ bool GetProcAddressA_WOW64(HANDLE hProc, HINSTANCE hDll, const char * szFunc, vo
 		return false;
 	}
 	
-	DWORD FuncRVA = reinterpret_cast<DWORD*>(pBase + pExportDir->AddressOfFunctions)[Ordinal];
+	DWORD FuncRVA = ReCa<DWORD*>(pBase + pExportDir->AddressOfFunctions)[Ordinal];
 
 	delete[] pExpDirBuffer;
 	delete[] pBuffer;
 
 	if (FuncRVA >= DirRVA && FuncRVA < DirRVA + ExportSize)
 	{
-		pOut = (BYTE*)Forwarded(FuncRVA);
-		return (pOut != nullptr);
+		return Forward(FuncRVA, pOut);
 	}
 
-	pOut = reinterpret_cast<BYTE*>(hDll) + FuncRVA;
+	pOut = modBase + FuncRVA;
 
 	return true;
 }

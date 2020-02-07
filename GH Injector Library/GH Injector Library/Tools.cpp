@@ -1,3 +1,5 @@
+#include "pch.h"
+
 #include "Tools.h"
 
 bool FileExists(const wchar_t * szFile)
@@ -5,50 +7,27 @@ bool FileExists(const wchar_t * szFile)
 	return (GetFileAttributesW(szFile) != INVALID_FILE_ATTRIBUTES);
 }
 
-bool IsNativeProcess(HANDLE hProc)
-{
-	BOOL bWOW64 = FALSE;
-	IsWow64Process(hProc, &bWOW64);
-
-	return (bWOW64 == FALSE);
-}
-
-ULONG GetSessionId(HANDLE hTargetProc, NTSTATUS & ntRetOut)
-{	
-	auto p_NtQueryInformationProcess = reinterpret_cast<f_NtQueryInformationProcess>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationProcess"));
-	if (!p_NtQueryInformationProcess)
-		return false;
-
-	PROCESS_SESSION_INFORMATION psi{ 0 };
-	ntRetOut = p_NtQueryInformationProcess(hTargetProc, ProcessSessionInformation, &psi, sizeof(psi), nullptr);
-	if (NT_FAIL(ntRetOut))
-		return (ULONG)-1;
-
-	return psi.SessionId;
-}
-
 DWORD ValidateFile(const wchar_t * szFile, DWORD desired_machine)
 {
-	std::ifstream File;
-	File.open(szFile, std::ios::binary | std::ios::ate);
-	if (File.rdstate() & std::ifstream::failbit)
+	std::ifstream File(szFile, std::ios::binary | std::ios::ate);
+	if (!File.good())
 	{
-		return INJ_ERR_CANT_OPEN_FILE;
+		return FILE_ERR_CANT_OPEN_FILE;
 	}
 
 	auto FileSize = File.tellg();
 	if (FileSize < 0x1000)
 	{
-		return INJ_ERR_INVALID_FILE_SIZE;
+		return FILE_ERR_INVALID_FILE_SIZE;
 	}
 
 	BYTE * headers = new BYTE[0x1000];
 	File.seekg(0, std::ios::beg);
-	File.read(reinterpret_cast<char*>(headers), 0x1000);
+	File.read(ReCa<char*>(headers), 0x1000);
 	File.close();
 
-	auto * pDos = reinterpret_cast<IMAGE_DOS_HEADER*>(headers);
-	auto * pNT	= reinterpret_cast<IMAGE_NT_HEADERS*>(headers + pDos->e_lfanew); //kinda risky for wow64 target but should work
+	auto * pDos = ReCa<IMAGE_DOS_HEADER*>(headers);
+	auto * pNT	= ReCa<IMAGE_NT_HEADERS*>(headers + pDos->e_lfanew); //no need for correct nt headers type
 
 	WORD magic		= pDos->e_magic;
 	DWORD signature = pNT->Signature;
@@ -58,7 +37,7 @@ DWORD ValidateFile(const wchar_t * szFile, DWORD desired_machine)
 
 	if (magic != 0x5A4D || signature != 0x4550 || machine != desired_machine) //"MZ" & "PE"
 	{
-		return INJ_ERR_INVALID_FILE;
+		return FILE_ERR_INVALID_FILE;
 	}
 
 	return 0;
@@ -97,6 +76,47 @@ bool GetOwnModulePath(wchar_t * pOut, size_t BufferCchSize)
 	return true;	
 }
 
+bool IsNativeProcess(HANDLE hTargetProc)
+{
+	BOOL bWOW64 = FALSE;
+	IsWow64Process(hTargetProc, &bWOW64);
+
+	return (bWOW64 == FALSE);
+}
+
+ULONG GetSessionId(HANDLE hTargetProc, NTSTATUS & ntRetOut)
+{	
+	auto h_nt_dll = GetModuleHandleA("ntdll.dll");
+	if (!h_nt_dll)
+		return false;
+
+	auto p_NtQueryInformationProcess = ReCa<f_NtQueryInformationProcess>(GetProcAddress(h_nt_dll, "NtQueryInformationProcess"));
+	if (!p_NtQueryInformationProcess)
+		return false;
+
+	PROCESS_SESSION_INFORMATION psi{ 0 };
+	ntRetOut = p_NtQueryInformationProcess(hTargetProc, ProcessSessionInformation, &psi, sizeof(psi), nullptr);
+	if (NT_FAIL(ntRetOut))
+		return (ULONG)-1;
+
+	return psi.SessionId;
+}
+
+bool IsElevatedProcess(HANDLE hTargetProc)
+{
+	HANDLE hToken = nullptr;
+	if (!OpenProcessToken(hTargetProc, TOKEN_QUERY, &hToken))
+		return false;
+
+	TOKEN_ELEVATION te{ 0 };
+	DWORD SizeOut = 0;
+	GetTokenInformation(hToken, TokenElevation, &te, sizeof(te), &SizeOut);
+
+	CloseHandle(hToken);
+	
+	return (te.TokenIsElevated != 0);
+}
+
 void ErrorLog(ERROR_INFO * info)
 {
 	wchar_t pPath[MAX_PATH * 2]{ 0 };
@@ -123,42 +143,39 @@ void ErrorLog(ERROR_INFO * info)
 	StringCchPrintfW(szErrorCode,	9, L"%08X", info->ErrorCode);
 	StringCchPrintfW(szWin32Error,	9, L"%08X", info->LastWin32Error);
 	StringCchPrintfW(szHandleValue,	9, L"%08X", info->HandleValue);
-
-
+	
 	std::wofstream error_log(FullPath, std::ios_base::out | std::ios_base::app);
-	error_log << szTime													<< std::endl;
-	error_log << L"Version          : " << GH_INJ_VERSION				<< std::endl;
+	if (!error_log.good())
+	{
+		return;
+	}
+
+	error_log << szTime																			<< std::endl;
+	error_log << L"Version          : " << GH_INJ_VERSION										<< std::endl;
 	error_log << L"File             : ";
 	if (info->szDllFileName)
-		error_log << info->szDllFileName								<< std::endl;
+		error_log << info->szDllFileName														<< std::endl;
 	else
-		error_log << "(dllpath = nullptr)"								<< std::endl;
-
-	error_log << L"PID              : "		<< info->TargetProcessId	<< std::endl;
-	error_log << L"Injectionmode    : "		<< info->InjectionMode		<< std::endl;
-	error_log << L"Launchmethod     : "		<< info->LaunchMethod		<< std::endl;
+		error_log << "(nullptr)"																<< std::endl;
+	error_log << L"Target           : ";
+	if (info->szTargetProcessExeFileName)
+		error_log << info->szTargetProcessExeFileName											<< std::endl;
+	else
+		error_log << "(nullptr)"																<< std::endl;
+	error_log << L"Target PID       : "		<< info->TargetProcessId							<< std::endl;
+	error_log << L"Injectionmode    : "		<< info->InjectionMode								<< std::endl;
+	error_log << L"Launchmethod     : "		<< info->LaunchMethod								<< std::endl;
 	error_log << L"Platform         : "		<< (info->bNative ? L"x64/x86 (native)" : L"wow64")	<< std::endl;
-	error_log << L"Flags            : 0x"	<< szFlags					<< std::endl;
-	error_log << L"Errorcode        : 0x"	<< szErrorCode				<< std::endl;
-	error_log << L"Win32Error       : 0x"	<< szWin32Error				<< std::endl;
-	error_log << L"HandleValue      : 0x"	<< szHandleValue			<< std::endl;
+	error_log << L"Flags            : 0x"	<< szFlags											<< std::endl;
+	error_log << L"Errorcode        : 0x"	<< szErrorCode										<< std::endl;
+	error_log << L"Win32Error       : 0x"	<< szWin32Error										<< std::endl;
+	if (info->HandleValue && (info->Flags & 0x100))
+	{
+		error_log << L"Hijack PID       : "	<< GetCurrentProcessId()							<< std::endl;
+		error_log << L"HandleValue      : "	<< szHandleValue									<< std::endl;
+	}
 	
 	error_log << std::endl;
 
-	error_log.close();		
-}
-
-bool IsElevatedProcess(HANDLE hProc)
-{
-	HANDLE hToken = nullptr;
-	if (!OpenProcessToken(hProc, TOKEN_QUERY, &hToken))
-		return false;
-
-	TOKEN_ELEVATION te{ 0 };
-	DWORD SizeOut = 0;
-	GetTokenInformation(hToken, TokenElevation, &te, sizeof(te), &SizeOut);
-
-	CloseHandle(hToken);
-	
-	return (te.TokenIsElevated != 0);
+	error_log.close();
 }

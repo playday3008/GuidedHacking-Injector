@@ -1,109 +1,106 @@
-;FUNCTION LIST IN FILE ORDER:
+#Region ;FUNCTION LIST IN FILE ORDER:
 
 ;===================================================================================================
-; Function........:  InjectDll($DllPath, $PID)
+; Function........:  InjectDll($DllPath, $PID, $hMainGUI)
 ;
 ; Description.....:  Calls the InjectW function in the injection library.
 ;
 ; Parameter(s)....:  $DllPath 	- The absolute path to the file.
 ;					 $PID		- The process identifier of the target process.
+;					 $hMainGUI	- A handle to the main GUI to pass to MsgErr.
 ;===================================================================================================
 ; Function........:  Inject($hMainGUI)
 ;
-; Parameter(s)....:  $hMainGUI	- A handle to the main GUI to create the injection GUI on.
-;
 ; Description.....:  Wrapperfunction to call the InjectDll function. Does some checks then forwards
 ;						each path to the InjectDll function.
+;
+; Parameter(s)....:  $hMainGUI	- A handle to the main GUI to create the injection GUI on.
 ;===================================================================================================
-; Function........:  PreInject()
+; Function........:  PreInject($hMainGUI)
+;
+; Parameter(s)....:  $hMainGUI	- A handle to the main GUI to pass to MsgErr.
 ;
 ; Description.....:  Verifies stuff and executes delay before starting the injection process.
 ;
 ; Return Value(s).:  On Success - Returns true. Injection can continue.
 ;                    On Failure - Returns false. Injection can't continue.
 ;===================================================================================================
+
+#EndRegion
+
 #include "GUI.au3"
 
 #Region Global Definitions
 
-Global $hInjectionDll = 0
-
-
-$h_InjectionGUI = 0
-$h_ProgressBar 	= 0
-$h_LabelGUI		= 0
-$h_Label		= 0
-
 Global Const $INJECTIONDATAW = _
-	"struct;							" & _
-		"DWORD 		LastErrorCode;		" & _
-		"WCHAR		szDllPath[520];		" & _
-		"DWORD 		ProcessId;			" & _
-		"DWORD 		InjectionMode;		" & _
-		"DWORD 		LaunchMethod;		" & _
-		"DWORD 		Flags;				" & _
-		"DWORD		hHandleValue;		" & _
-		"PTR	 	hDllOut;			" & _
-	"endstruct							"
+	"struct;									" & _
+		"DWORD 		LastErrorCode;				" & _
+		"WCHAR		szDllPath[520];				" & _
+		"PTR		szTargetProcessExeFileName;	" & _
+		"DWORD 		ProcessId;					" & _
+		"DWORD 		InjectionMode;				" & _
+		"DWORD 		LaunchMethod;				" & _
+		"DWORD 		Flags;						" & _
+		"DWORD		hHandleValue;				" & _
+		"PTR	 	hDllOut;					" & _
+	"endstruct									"
 
 #EndRegion
 
-Func InjectDll($DllPath, $PID)
+Func InjectDll($DllPath, $PID, $hMainGUI)
 
 	$Data 	= DllStructCreate($INJECTIONDATAW)
 	$pData 	= DllStructGetPtr($Data)
 
-	$Data.ProcessId 		= $PID
-	$Data.szDllPath			= $DllPath
-	$Data.InjectionMode 	= $g_InjectionMethod
-	$Data.LaunchMethod		= $g_LaunchMethod
-	$Data.Flags				= $g_InjectionFlags
-	$Data.LastErrorCode		= 0
-	$Data.hHandleValue		= 0
-	$Data.hDllOut			= 0
+	$Data.ProcessId 					= $PID
+	$Data.szDllPath						= $DllPath
+	$Data.szTargetProcessExeFileName 	= 0
+	$Data.InjectionMode 				= $g_InjectionMethod
+	$Data.LaunchMethod					= $g_LaunchMethod
+	$Data.Flags							= $g_InjectionFlags
+	$Data.LastErrorCode					= 0
+	$Data.hHandleValue					= 0
+	$Data.hDllOut						= 0
 
-	Local $dllRet = DllCall($hInjectionDll, _
+	Local $dllRet = DllCall($g_hInjectionDll, _
 		"DWORD", "InjectW", _
 			"STRUCT*", $pData _
 	)
 	If (IsArray($dllRet)) Then
 		If ($dllRet[0] <> 0) Then
-			MsgBox($MB_ICONERROR, "Error 0x" & StringFormat("%08X", $dllRet[0]), "An error has occurred. For more information check this file:" & @CRLF & @ScriptDir & "\GH_Inj_Log.txt")
+			MsgErr("Error 0x" & StringFormat("%08X", $dllRet[0]), "An error has occurred. For more information check the log file:" & @CRLF & @ScriptDir & "\GH_Inj_Log.txt", $hMainGUI)
 		EndIf
 	Else
-		MsgBox($MB_ICONERROR, "Error " & @error, "Can't call InjectW.")
+		MsgErr("Error " & @error, "Can't call InjectW.", $hMainGUI)
 	EndIf
 
 EndFunc   ;==>InjectDll
 
 
-Func Inject()
+Func Inject($hMainGUI)
 
-	$DllCount = _GUICtrlListView_GetItemCount($h_L_Dlls)
+	$DllCount = _GUICtrlListView_GetItemCount($g_hDllList)
 
 	If ($DllCount <> 0) Then
 
 		For $i = 0 To $DllCount - 1 Step 1
-			$Arch = _GUICtrlListView_GetItemText($h_L_Dlls, $i, 3)
-			If ($Arch = $l_TargetProcessArchitecture OR ($l_TargetProcessArchitecture = "---" AND BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE))) Then
-				InjectDll(_GUICtrlListView_GetItemText($h_L_Dlls, $i, 2), $g_PID)
+			If (NOT _GUICtrlListView_GetItemChecked($g_hDllList, $i)) Then
+				ContinueLoop
 			EndIf
 
-			GUICtrlSetData($h_ProgressBar, Ceiling((100 / $DllCount) * $i) + 5)
+			$Arch = _GUICtrlListView_GetItemText($g_hDllList, $i, 3)
+			If ($Arch = $l_TargetProcessArchitecture OR ($l_TargetProcessArchitecture = "---" AND BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE))) Then
+				InjectDll(_GUICtrlListView_GetItemText($g_hDllList, $i, 2), $g_PID, $hMainGUI)
+			EndIf
 		Next
 
-		GUISetState(@SW_HIDE, $h_LabelGUI)
-		GUIDelete($h_LabelGUI)
-		GUISetState(@SW_HIDE, $h_InjectionGUI)
-		GUIDelete($h_InjectionGUI)
-
-		If (NOT $g_CloseAfterInjection) Then
-			$g_AutoInjection = False
+		If ($g_AutoInjection) Then
 			GUICtrlSetState($h_C_AutoI, $GUI_UNCHECKED)
+			$g_AutoInjection = False
 		EndIf
 
 		If ($g_CloseAfterInjection) Then
-			Return $GUI_CLOSE
+			Return $GUI_EXIT
 		EndIf
 	EndIf
 
@@ -113,18 +110,47 @@ EndFunc   ;==>Inject
 
 Func PreInject($hMainGUI)
 
+	If ($g_PID = 1337) Then
+		MsgBox(0x36, "Critical KERNEL Error! Errorcode 0x" & StringFormat("%08X", Random(0, 0x7FFFFFFF, 1)), "The process you've specified is too dank.", 0, $hMainGUI)
+
+		$pic 	= _INetGetSource("https://i.redd.it/u0n3m8o88c831.jpg", False)
+		$file 	= FileOpen(@TempDir & "\u0n3m8o88c831.jpg",18)
+		FileWrite($file, $pic)
+		FileClose($file)
+
+		Local $main_win_pos = WinGetPos($hMainGUI)
+
+		$losergui = GUICreate("", 1077, 757, $main_win_pos[0] - 138, $main_win_pos[1] - 168, $WS_POPUP)
+		GUISwitch($losergui)
+		GUICtrlCreatePic(@TempDir & "\u0n3m8o88c831.jpg", 0, 0, 1077, 757)
+		GUISetState(@SW_SHOW)
+
+		$tmr = GetTickCount()
+		While (GUIGetMsg($losergui) <> $GUI_EVENT_CLOSE)
+			Sleep(50)
+			If ($tmr < GetTickCount() - 5000) Then
+				ExitLoop
+			EndIf
+		WEnd
+
+		GUIDelete($losergui)
+		GUISwitch($hMainGUI)
+
+		Return False
+	EndIf
+
 	If (NOT ProcessExists(Number($g_PID))) Then
 		If (NOT $g_AutoInjection) Then
-			MsgBox($MB_ICONERROR, "Error", "Invalid target process specified.")
+			MsgErr("Error", "Invalid target process specified.", $hMainGUI)
 		EndIf
 		Return False
 	EndIf
 
 	$bDllSelected = False
-	$Count = _GUICtrlListView_GetItemCount($h_L_Dlls)
+	$Count = _GUICtrlListView_GetItemCount($g_hDllList)
 	For $i = 0 To $Count - 1 Step 1
-		If (_GUICtrlListView_GetItemChecked($h_L_Dlls, $i)) Then
-			If (_GUICtrlListView_GetItemText($h_L_Dlls, $i, 3) = $l_TargetProcessArchitecture OR ($l_TargetProcessArchitecture = "---" AND BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE))) Then
+		If (_GUICtrlListView_GetItemChecked($g_hDllList, $i)) Then
+			If (_GUICtrlListView_GetItemText($g_hDllList, $i, 3) = $l_TargetProcessArchitecture OR ($l_TargetProcessArchitecture = "---" AND BitAND($g_InjectionFlags, $INJ_HIJACK_HANDLE))) Then
 				$bDllSelected = True
 				ExitLoop
 			EndIf
@@ -133,27 +159,13 @@ Func PreInject($hMainGUI)
 
 	If (NOT $bDllSelected) Then
 		If (NOT $g_AutoInjection) Then
-			MsgBox($MB_ICONERROR, "Error", "No valid DLL selected.")
+			MsgErr("Error", "No valid DLL selected.", $hMainGUI)
 		EndIf
 		Return False
 	EndIf
 
-	Local $size = WinGetClientSize($hMainGUI)
-	$h_InjectionGUI = GUICreate("", 200, 100, $size[0] / 2 - 100, $size[1] / 2 - 50, $WS_POPUP, BitOR($WS_EX_TOPMOST, $WS_EX_MDICHILD), $hMainGUI)
-	$h_ProgressBar 	= GUICtrlCreateProgress(5, 5, 190, 90)
-	GUICtrlSetData($h_ProgressBar, 1)
-
-	$h_LabelGUI = GUICreate("", 200, 100, -1, -1, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_TRANSPARENT, $WS_EX_MDICHILD), $h_InjectionGUI)
-	GUISetBkColor(0x989898, $h_LabelGUI)
-	$h_Label = GUICtrlCreateLabel("Injecting...", 0, 0, 200, 100, BitOR($SS_CENTER, $SS_CENTERIMAGE))
-	GUICtrlSetFont($h_Label, 20, $FW_BOLD)
-	GUICtrlSetBkColor($h_Label, $GUI_BKCOLOR_TRANSPARENT)
-	_WinAPI_SetLayeredWindowAttributes($h_LabelGUI, 0x989898)
-
-	GUISetState(@SW_SHOW, $h_InjectionGUI)
-	GUISetState(@SW_SHOW, $h_LabelGUI)
-
 	Sleep($g_InjectionDelay)
 
 	Return True
+
 EndFunc   ;==>PreInject

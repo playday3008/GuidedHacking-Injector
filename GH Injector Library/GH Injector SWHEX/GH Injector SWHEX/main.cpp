@@ -1,39 +1,30 @@
-#include <Windows.h>
-#include <fstream>
-#include <Psapi.h>
-#include <vector>
-#include <strsafe.h>
+#include "main.h"
 
-#pragma comment(lib, "Psapi.lib")
-
-#ifdef _WIN64
-#define FILENAME L"\\SWHEX64.txt"
-#else
-#define FILENAME L"\\SWHEX86.txt"
-#endif
-
-#define SWHEX_ERR_SUCCESS			0x00000000
-#define SWHEX_ERR_CANT_OPEN_FILE	0x30000001
-#define SWHEX_ERR_EMPTY_FILE		0x30000002
-#define SWHEX_ERR_INVALID_INFO		0x30000003
-#define SWHEX_ERR_ENUM_WINDOWS_FAIL 0x30000004
-#define SWHEX_ERR_NO_WINDOWS		0x30000005
-
-struct HookData
+BOOL CALLBACK EnumWindowsCallback(HWND hWnd, LPARAM lParam)
 {
-	HHOOK	m_hHook;
-	HWND	m_hWnd;
-};
+	auto * data = reinterpret_cast<EnumWindowsCallback_Data*>(lParam);
 
-struct EnumWindowsCallback_Data
-{
-	std::vector<HookData>	m_HookData;
-	DWORD					m_PID;
-	HOOKPROC				m_pHook;
-	HINSTANCE				m_hModule;
-};
+	DWORD winPID = 0;
+	DWORD winTID = GetWindowThreadProcessId(hWnd, &winPID);
 
-BOOL CALLBACK EnumWindowsCallback(HWND hWnd, LPARAM lParam);
+	if (winPID == data->m_PID)
+	{
+		wchar_t szWindow[MAX_PATH]{ 0 };
+		if (IsWindowVisible(hWnd) && GetWindowTextW(hWnd, szWindow, MAX_PATH))
+		{
+			if (GetClassNameW(hWnd, szWindow, MAX_PATH) && wcscmp(szWindow, L"ConsoleWindowClass"))
+			{
+				HHOOK hHook = SetWindowsHookEx(WH_CALLWNDPROC, data->m_pHook, data->m_hModule, winTID);
+				if (hHook)
+				{
+					data->m_HookData.push_back({ hHook, hWnd });
+				}
+			}
+		}
+	}
+
+	return TRUE;
+}
 
 int main()
 {
@@ -41,7 +32,10 @@ int main()
 	GetModuleFileNameW(GetModuleHandleW(nullptr), InfoPath, sizeof(InfoPath) / sizeof(InfoPath[0]));
 
 	size_t size_out = 0;
-	StringCchLengthW(InfoPath, MAX_PATH * 2, &size_out);
+	if (FAILED(StringCchLengthW(InfoPath, MAX_PATH * 2, &size_out)))
+	{
+		return SWHEX_ERR_INVALID_PATH;
+	}
 
 	wchar_t * pInfoEnd = InfoPath;
 	pInfoEnd += size_out;
@@ -50,9 +44,8 @@ int main()
 
 	StringCbCatW(InfoPath, sizeof(InfoPath), FILENAME);
 
-	std::ifstream File;
-	File.open(InfoPath, std::ios::ate);
-	if (File.rdstate() & std::ifstream::failbit)
+	std::ifstream File(InfoPath, std::ios::ate);
+	if (!File.good())
 	{
 		return SWHEX_ERR_CANT_OPEN_FILE;
 	}
@@ -63,7 +56,7 @@ int main()
 		File.close();
 		return SWHEX_ERR_EMPTY_FILE;
 	}
-
+	
 	File.seekg(0, std::ios::beg);
 
 	char * info = new char[static_cast<size_t>(FileSize)];
@@ -80,7 +73,7 @@ int main()
 
 	DWORD ProcID = strtol(pszPID, &info, 10);
 #ifdef _WIN64
-	UINT_PTR pHook = strtoll(pszHook, &info, 0x10);
+	ULONG_PTR pHook = strtoll(pszHook, &info, 0x10);
 #else
 	DWORD pHook = strtol(pszHook, &info, 0x10);
 #endif
@@ -115,30 +108,4 @@ int main()
 	}
 
 	return SWHEX_ERR_SUCCESS;
-}
-
-BOOL CALLBACK EnumWindowsCallback(HWND hWnd, LPARAM lParam)
-{
-	auto * pData = reinterpret_cast<EnumWindowsCallback_Data*>(lParam);
-	DWORD PID = pData->m_PID;
-	
-	DWORD winPID = 0;
-	DWORD winTID = GetWindowThreadProcessId(hWnd, &winPID);
-	if (winPID == PID)
-	{
-		wchar_t szWindow[MAX_PATH]{ 0 };
-		if (IsWindowVisible(hWnd) && GetWindowTextW(hWnd, szWindow, MAX_PATH))
-		{
-			if (GetClassNameW(hWnd, szWindow, MAX_PATH) && wcscmp(szWindow, L"ConsoleWindowClass"))
-			{
-				HHOOK hHook = SetWindowsHookExA(WH_CALLWNDPROC, pData->m_pHook, pData->m_hModule, winTID);
-				if (hHook)
-				{
-					pData->m_HookData.push_back({ hHook, hWnd });
-				}
-			}
-		}
-	}
-
-	return TRUE;
 }
