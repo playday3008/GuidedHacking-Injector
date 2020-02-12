@@ -19,6 +19,12 @@
     <Filter Include="Quelldateien\wow64">
       <UniqueIdentifier>{9b97304f-da6c-4772-b09b-b9d220bc2b8f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Quelldateien\native\Injection Methods">
+      <UniqueIdentifier>{d5fa2704-bd0a-49aa-935a-dd175543f290}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\wow64\Injection Methods">
+      <UniqueIdentifier>{55a0bf0c-81f5-48b8-8bb9-1c73e57ccab7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Handle Hijacking.h">
@@ -45,6 +51,15 @@
     <ClInclude Include="Eject.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="Error.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="Manul Mapping.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Handle Hijacking.cpp">
@@ -59,15 +74,6 @@
     <ClCompile Include="Tools.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="Import Handler Native.cpp">
-      <Filter>Quelldateien\native</Filter>
-    </ClCompile>
-    <ClCompile Include="Injection Native.cpp">
-      <Filter>Quelldateien\native</Filter>
-    </ClCompile>
-    <ClCompile Include="Start Routine Native.cpp">
-      <Filter>Quelldateien\native</Filter>
-    </ClCompile>
     <ClCompile Include="Import Handler WOW64.cpp">
       <Filter>Quelldateien\wow64</Filter>
     </ClCompile>
@@ -79,6 +85,36 @@
     </ClCompile>
     <ClCompile Include="Eject.cpp">
       <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="Manual Mapping.cpp">
+      <Filter>Quelldateien\native\Injection Methods</Filter>
+    </ClCompile>
+    <ClCompile Include="LoadLibraryExW.cpp">
+      <Filter>Quelldateien\native\Injection Methods</Filter>
+    </ClCompile>
+    <ClCompile Include="LdrLoadDll.cpp">
+      <Filter>Quelldateien\native\Injection Methods</Filter>
+    </ClCompile>
+    <ClCompile Include="LoadLibraryExW WOW64.cpp">
+      <Filter>Quelldateien\wow64\Injection Methods</Filter>
+    </ClCompile>
+    <ClCompile Include="Manual Mapping WOW64.cpp">
+      <Filter>Quelldateien\wow64\Injection Methods</Filter>
+    </ClCompile>
+    <ClCompile Include="LdrLoadDll WOW64.cpp">
+      <Filter>Quelldateien\wow64\Injection Methods</Filter>
+    </ClCompile>
+    <ClCompile Include="Import Handler.cpp">
+      <Filter>Quelldateien\native</Filter>
+    </ClCompile>
+    <ClCompile Include="Injection.cpp">
+      <Filter>Quelldateien\native</Filter>
+    </ClCompile>
+    <ClCompile Include="Start Routine.cpp">
+      <Filter>Quelldateien\native</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

@@ -16,7 +16,6 @@ Release Downloads: [Register & Download DLL Injector Here ](https://guidedhackin
 * SetWindowsHookEx
 * QueueUserAPC
 
-
 Compatible with both 32-bit and 64-bit programs running on Windows XP or higher. 
 Settings of the GUI are saved to a local ini file.  Processes can be 
 selected by name or process ID and by the fancy process picker.
@@ -31,6 +30,25 @@ These functions take a pointer to a INJECTIONDATAA/INJECTIONDATAW structure. For
 struct definition / enums / flags check "Injection.h".
 
 Rake's dank video tutorial for v2.4 showing how to use it's features and a source code review:
+
+**How to Build from Source**
+
+Compile "GH Injector Library\GH Injector Library.sln" with these steps:
+1. Open the project
+2. Click "Build" in the menubar
+3. Click "Batch Build"
+4. Tick all 4 release builds (Configuration = Release)
+5. Click "Build"
+6. Done
+
+Install AutoIt: https://www.autoitscript.com/site/autoit/downloads/
+It is Required to compile GUI.
+
+Run CompileAndMerge.bat
+
+It will compile the AutoIt files and merge all the required files into "GH Injector\".
+
+To run the GH Injector simply open "GH Injector\GH Injector.exe".
 
 **Credits**
 

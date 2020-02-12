@@ -1,18 +1,77 @@
+#include "pch.h"
+
 #include "Process Info.h"
 
 #pragma comment(lib, "Psapi.lib")
 
-#define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
-#define NEXT_SYSTEM_PROCESS_ENTRY(pCurrent) reinterpret_cast<SYSTEM_PROCESS_INFORMATION*>(reinterpret_cast<BYTE*>(pCurrent) + pCurrent->NextEntryOffset)
+#define NEXT_SYSTEM_PROCESS_ENTRY(pCurrent) ReCa<SYSTEM_PROCESS_INFORMATION*>(ReCa<BYTE*>(pCurrent) + pCurrent->NextEntryOffset)
+
+PEB * ProcessInfo::GetPEB_Native()
+{
+	if (!m_pFirstProcess)
+		return nullptr;
+
+	PROCESS_BASIC_INFORMATION PBI{ 0 };
+	ULONG size_out = 0;
+	NTSTATUS ntRet = m_pNtQueryInformationProcess(m_hCurrentProcess, ProcessBasicInformation, &PBI, sizeof(PROCESS_BASIC_INFORMATION), &size_out);
+
+	if (NT_FAIL(ntRet))
+		return nullptr;
+
+	return PBI.pPEB;
+}
+
+LDR_DATA_TABLE_ENTRY * ProcessInfo::GetLdrEntry_Native(HINSTANCE hMod)
+{
+	if (!m_pFirstProcess)
+		return nullptr;
+
+	PEB * ppeb = GetPEB();
+	if (!ppeb)
+		return nullptr;
+
+	PEB	peb{ 0 };
+	if (!ReadProcessMemory(m_hCurrentProcess, ppeb, &peb, sizeof(PEB), nullptr))
+		return nullptr;
+
+	PEB_LDR_DATA ldrdata{ 0 };
+	if (!ReadProcessMemory(m_hCurrentProcess, peb.Ldr, &ldrdata, sizeof(PEB_LDR_DATA), nullptr))
+		return nullptr;
+
+	LIST_ENTRY * pCurrentEntry = ldrdata.InLoadOrderModuleListHead.Flink;
+	LIST_ENTRY * pLastEntry = ldrdata.InLoadOrderModuleListHead.Blink;
+
+	while (true)
+	{
+		LDR_DATA_TABLE_ENTRY CurrentEntry{ 0 };
+		ReadProcessMemory(m_hCurrentProcess, pCurrentEntry, &CurrentEntry, sizeof(LDR_DATA_TABLE_ENTRY), nullptr);
+
+		if (CurrentEntry.DllBase == hMod)
+			return ReCa<LDR_DATA_TABLE_ENTRY *>(pCurrentEntry);
+
+		if (pCurrentEntry == pLastEntry)
+			break;
+
+		pCurrentEntry = CurrentEntry.InLoadOrder.Flink;
+	}
+
+	return nullptr;
+}
 
 ProcessInfo::ProcessInfo()
 {
+	HINSTANCE hNTDLL = GetModuleHandleA("ntdll.dll");
+	if (!hNTDLL)
+		return;
+
+	m_pNtQueryInformationProcess	= ReCa<f_NtQueryInformationProcess>	(GetProcAddress(hNTDLL, "NtQueryInformationProcess"));
+	m_pNtQuerySystemInformation		= ReCa<f_NtQuerySystemInformation>	(GetProcAddress(hNTDLL, "NtQuerySystemInformation"));
+
+	if (!m_pNtQueryInformationProcess || !m_pNtQuerySystemInformation)
+		return;
+
 	m_BufferSize	= 0x10000;
 	m_pFirstProcess = nullptr;
-
-	HINSTANCE hNTDLL = GetModuleHandleA("ntdll.dll");
-	m_pNtQueryInformationProcess	= reinterpret_cast<f_NtQueryInformationProcess>	(GetProcAddress(hNTDLL, "NtQueryInformationProcess"));
-	m_pNtQuerySystemInformation		= reinterpret_cast<f_NtQuerySystemInformation>	(GetProcAddress(hNTDLL, "NtQuerySystemInformation"));
 
 	RefreshInformation();
 }
@@ -23,28 +82,28 @@ ProcessInfo::~ProcessInfo()
 		delete[] m_pFirstProcess;
 }
 
-bool ProcessInfo::SetProcess(HANDLE hProc)
+bool ProcessInfo::SetProcess(HANDLE hTargetProc)
 {
-	if (!hProc)
+	if (!hTargetProc)
 		return false;
 
 	if (!m_pFirstProcess)
 		if (!RefreshInformation())
 			return false;
 
-	m_hCurrentProcess = hProc;
+	m_hCurrentProcess = hTargetProc;
 
-	UINT_PTR PID = GetProcessId(m_hCurrentProcess);
+	ULONG_PTR PID = GetProcessId(m_hCurrentProcess);
 
 	while (NEXT_SYSTEM_PROCESS_ENTRY(m_pCurrentProcess) != m_pCurrentProcess)
 	{
-		if (m_pCurrentProcess->UniqueProcessId == reinterpret_cast<void*>(PID))
+		if (m_pCurrentProcess->UniqueProcessId == ReCa<void*>(PID))
 			break;
 
 		m_pCurrentProcess = NEXT_SYSTEM_PROCESS_ENTRY(m_pCurrentProcess);
 	}
 
-	if (m_pCurrentProcess->UniqueProcessId != reinterpret_cast<void*>(PID))
+	if (m_pCurrentProcess->UniqueProcessId != ReCa<void*>(PID))
 	{
 		m_pCurrentProcess = m_pFirstProcess;
 		return false;
@@ -52,7 +111,7 @@ bool ProcessInfo::SetProcess(HANDLE hProc)
 
 	m_pCurrentThread = &m_pCurrentProcess->Threads[0];
 
-	return true;	
+	return true;
 }
 
 bool ProcessInfo::SetThread(DWORD TID)
@@ -65,7 +124,7 @@ bool ProcessInfo::SetThread(DWORD TID)
 
 	for (UINT i = 0; i != m_pCurrentProcess->NumberOfThreads; ++i)
 	{
-		if (m_pCurrentProcess->Threads[i].ClientId.UniqueThread == reinterpret_cast<void*>(UINT_PTR(TID)))
+		if (m_pCurrentProcess->Threads[i].ClientId.UniqueThread == ReCa<void*>(ULONG_PTR(TID)))
 		{
 			m_pCurrentThread = &m_pCurrentProcess->Threads[i];
 			break;
@@ -113,7 +172,7 @@ bool ProcessInfo::RefreshInformation()
 {
 	if (!m_pFirstProcess)
 	{
-		m_pFirstProcess = reinterpret_cast<SYSTEM_PROCESS_INFORMATION*>(new BYTE[m_BufferSize]);
+		m_pFirstProcess = ReCa<SYSTEM_PROCESS_INFORMATION*>(new BYTE[m_BufferSize]);
 		if (!m_pFirstProcess)
 			return false;
 	}
@@ -133,7 +192,7 @@ bool ProcessInfo::RefreshInformation()
 		delete[] m_pFirstProcess;
 
 		m_BufferSize = size_out + 0x1000;
-		m_pFirstProcess = reinterpret_cast<SYSTEM_PROCESS_INFORMATION*>(new BYTE[m_BufferSize]);
+		m_pFirstProcess = ReCa<SYSTEM_PROCESS_INFORMATION*>(new BYTE[m_BufferSize]);
 		if (!m_pFirstProcess)
 			return false;
 
@@ -156,17 +215,12 @@ bool ProcessInfo::RefreshInformation()
 
 PEB * ProcessInfo::GetPEB()
 {
-	if (!m_pFirstProcess)
-		return false;
-	
-	PROCESS_BASIC_INFORMATION PBI{ 0 };
-	ULONG size_out = 0;
-	NTSTATUS ntRet = m_pNtQueryInformationProcess(m_hCurrentProcess, ProcessBasicInformation, &PBI, sizeof(PROCESS_BASIC_INFORMATION), &size_out);
-	
-	if (NT_FAIL(ntRet))
-		return nullptr;
-	
-	return PBI.pPEB;
+	return GetPEB_Native();
+}
+
+LDR_DATA_TABLE_ENTRY * ProcessInfo::GetLdrEntry(HINSTANCE hMod)
+{
+	return GetLdrEntry_Native(hMod);
 }
 
 DWORD ProcessInfo::GetPID()
@@ -230,7 +284,15 @@ DWORD ProcessInfo::GetTID()
 	if (!m_pFirstProcess)
 		return 0;
 
-	return DWORD(reinterpret_cast<UINT_PTR>(m_pCurrentThread->ClientId.UniqueThread) & 0xFFFFFFFF);
+	return DWORD(ReCa<ULONG_PTR>(m_pCurrentThread->ClientId.UniqueThread) & 0xFFFFFFFF);
+}
+
+DWORD ProcessInfo::GetThreadId()
+{
+	if (!m_pFirstProcess)
+		return 0;
+
+	return DWORD(ReCa<ULONG_PTR>(m_pCurrentThread->ClientId.UniqueThread) & 0xFFFFFFFF);
 }
 
 bool ProcessInfo::GetThreadState(THREAD_STATE & state, KWAIT_REASON & reason)
@@ -244,7 +306,7 @@ bool ProcessInfo::GetThreadState(THREAD_STATE & state, KWAIT_REASON & reason)
 	return true;
 }
 
-bool ProcessInfo::GetThreadStartAddress(void *& start_address)
+bool ProcessInfo::GetThreadStartAddress(void * &start_address)
 {
 	if (!m_pFirstProcess)
 		return false;
@@ -269,3 +331,58 @@ const SYSTEM_THREAD_INFORMATION * ProcessInfo::GetThreadInfo()
 
 	return nullptr;
 }
+
+#ifdef _WIN64
+
+PEB32 * ProcessInfo::GetPEB_WOW64()
+{
+	if (!m_pFirstProcess)
+		return nullptr;
+
+	ULONG_PTR pPEB;
+	ULONG size_out = 0;
+	NTSTATUS ntRet = m_pNtQueryInformationProcess(m_hCurrentProcess, ProcessWow64Information, &pPEB, sizeof(pPEB), &size_out);
+
+	if (NT_FAIL(ntRet))
+		return nullptr;
+
+	return ReCa<PEB32 *>(pPEB);
+}
+
+LDR_DATA_TABLE_ENTRY32 * ProcessInfo::GetLdrEntry_WOW64(HINSTANCE hMod)
+{
+	if (!m_pFirstProcess)
+		return nullptr;
+	
+	PEB32 * ppeb = GetPEB_WOW64();
+	if (!ppeb)
+		return nullptr;
+
+	PEB32 peb{ 0 };
+	if (!ReadProcessMemory(m_hCurrentProcess, ppeb, &peb, sizeof(PEB32), nullptr))
+		return nullptr;
+	
+	PEB_LDR_DATA32 ldrdata{ 0 };
+	if (!ReadProcessMemory(m_hCurrentProcess, MPTR(peb.Ldr), &ldrdata, sizeof(PEB_LDR_DATA32), nullptr))
+		return nullptr;
+		
+	LIST_ENTRY32 * pCurrentEntry	= ReCa<LIST_ENTRY32*>((ULONG_PTR)ldrdata.InLoadOrderModuleListHead.Flink);
+	LIST_ENTRY32 * pLastEntry		= ReCa<LIST_ENTRY32*>((ULONG_PTR)ldrdata.InLoadOrderModuleListHead.Blink);
+
+	while (true)
+	{
+		LDR_DATA_TABLE_ENTRY32 CurrentEntry{ 0 };
+		ReadProcessMemory(m_hCurrentProcess, pCurrentEntry, &CurrentEntry, sizeof(LDR_DATA_TABLE_ENTRY32), nullptr);
+
+		if (CurrentEntry.DllBase == MDWD(hMod))
+			return ReCa<LDR_DATA_TABLE_ENTRY32*>(pCurrentEntry);
+
+		if (pCurrentEntry == pLastEntry)
+			break;
+
+		pCurrentEntry = ReCa<LIST_ENTRY32*>((ULONG_PTR)CurrentEntry.InLoadOrder.Flink);
+	}
+
+	return nullptr;
+}
+#endif

@@ -1,31 +1,45 @@
-;FUNCTION LIST IN FILE ORDER:
+#Region ;FUNCTION LIST IN FILE ORDER:
 
 ;===================================================================================================
 ; Function........:  Update()
 ;
-; Parameter(s)....:  $hMainGUI	- A handle to the main GUI to create the injection GUI on.
+; Parameter(s)....:  $hParent		- A handle to the parent window (optional).
+;					 $bForceUpdate 	- Forces the update even if the current version is the newest.
 ;
 ; Description.....:  Checks for a newer version and updates if desired.
 ;===================================================================================================
 
+#EndRegion
+
 #include "Include.au3"
 
-Func Update($hMainGUI)
+Func Update($hParent, $bForceUpdate = False)
 
-	$VersionRef 		= "http://pastebin.com/raw/npsqXhuQ"
-	$DownloadRef 		= "http://pastebin.com/raw/XwHpPeJC"
+	$VersionRef 	 = "http://guidedhacking.com/gh/inj"
+	$g_NewestVersion = _INetGetSource($VersionRef)
 
-	$g_NewestVersion 	= _INetGetSource($VersionRef)
+	If ($g_NewestVersion OR $bForceUpdate) Then
+		If (Number($g_CurrentVersion) < Number($g_NewestVersion) OR $bForceUpdate) Then
+			$DownloadLink = "http://guidedhacking.com/gh/inj/V" & $g_NewestVersion & "/GH Injector.zip"
 
-	If ($g_NewestVersion) Then
-		If (StringCompare($g_CurrentVersion, $g_NewestVersion)) Then
-			$h_GUI_Update = GUICreate("New version available", 250, 90, -1, -1, BitXOR($GUI_SS_DEFAULT_GUI, $WS_MINIMIZEBOX), $WS_EX_TOPMOST, $hMainGUI)
+			$x = 250
+			$y = 90
+			Local $win_info = WinGetPos($hParent)
+			If (NOT @error) Then
+				$x = $win_info[0] + $win_info[2] / 2 - 125
+				$y = $win_info[1] + $win_info[3] / 2 - 45
+			EndIf
+
+			$h_GUI_Update = GUICreate("New version available", 250, 90, $x, $y, BitXOR($GUI_SS_DEFAULT_GUI, $WS_MINIMIZEBOX), $WS_EX_TOPMOST, $hParent)
 			$h_L_InfoText = GUICtrlCreateLabel("This version of the GH Injector is outdated." & @CRLF & "The newest version is V" & $g_NewestVersion & ".", 20, 10)
 			$h_B_Update = GUICtrlCreateButton("Update", 20, 43, 87)
 			$h_B_Cancel = GUICtrlCreateButton("Skip", 137, 43, 87)
 			$h_C_Ignore = GUICtrlCreateCheckbox("Ignore future updates", 20, 70)
 
-			GUISetState(@SW_SHOW)
+			GUISetState(@SW_SHOW, $h_GUI_Update)
+			If ($hParent <> 0) Then
+				GUISetState(@SW_DISABLE, $hParent)
+			EndIf
 
 			While (True)
 				$Msg = GUIGetMsg()
@@ -47,14 +61,11 @@ Func Update($hMainGUI)
 
 					Case $Msg = $h_B_Update
 
-						$DownloadLink = _INetGetSource($DownloadRef)
-						GUIDelete($h_GUI_Update)
-
-						$h_GUI_Download = GUICreate("Update in progress (0%)", 250, 90, -1, -1, BitXOR($GUI_SS_DEFAULT_GUI, $WS_MINIMIZEBOX), $WS_EX_TOPMOST, $hMainGUI)
+						$h_GUI_Download = GUICreate("Update in progress (0%)", 250, 90, $x, $y, BitXOR($GUI_SS_DEFAULT_GUI, $WS_MINIMIZEBOX), $WS_EX_TOPMOST, $hParent)
 
 						$h_Progress		= GUICtrlCreateProgress(5, 5, 240, 80)
 
-						$h_LabelGUI = GUICreate("", 250, 90, -1, -1, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_TRANSPARENT, $WS_EX_MDICHILD), $h_GUI_Download)
+						$h_LabelGUI = GUICreate("", 250, 90, 0, 0, $WS_POPUP, BitOR($WS_EX_LAYERED, $WS_EX_TRANSPARENT, $WS_EX_MDICHILD, $WS_EX_TOPMOST), $h_GUI_Download)
 						GUISetBkColor(0x989898, $h_LabelGUI)
 
 						$h_Label = GUICtrlCreateLabel("Downloading...", 0, 0, 250, 90, BitOR($SS_CENTER, $SS_CENTERIMAGE))
@@ -62,6 +73,9 @@ Func Update($hMainGUI)
 						GUICtrlSetBkColor($h_Label, $GUI_BKCOLOR_TRANSPARENT)
 
 						_WinAPI_SetLayeredWindowAttributes($h_LabelGUI, 0x989898)
+
+						GUISetState(@SW_HIDE, $h_GUI_Update)
+						GUIDelete($h_GUI_Update)
 
 						GUISetState(@SW_SHOW, $h_GUI_Download)
 						GUISetState(@SW_SHOW, $h_LabelGUI)
@@ -72,7 +86,7 @@ Func Update($hMainGUI)
 						EndIf
 
 						$hDownload = InetGet($DownloadLink, $Path, $INET_FORCERELOAD, $INET_DOWNLOADBACKGROUND)
-						$bytes_max = 2124762
+						$bytes_max = 2236416
 
 						While (InetGetInfo($hDownload, $INET_DOWNLOADCOMPLETE) = False)
 							$bytes_read = InetGetInfo($hDownload, $INET_DOWNLOADREAD)
@@ -91,6 +105,9 @@ Func Update($hMainGUI)
 							GUIDelete($h_LabelGUI)
 							GUISetState(@SW_HIDE, $h_GUI_Download)
 							GUIDelete($h_GUI_Download)
+							If ($hParent) Then
+								GUISetState(@SW_ENABLE, $hParent)
+							EndIf
 							MsgBox($MB_ICONERROR, "Error", "An error occured and the download couldn't be completed.")
 							Return
 
@@ -100,6 +117,9 @@ Func Update($hMainGUI)
 							GUIDelete($h_LabelGUI)
 							GUISetState(@SW_HIDE, $h_GUI_Download)
 							GUIDelete($h_GUI_Download)
+							If ($hParent) Then
+								GUISetState(@SW_ENABLE, $hParent)
+							EndIf
 							ShellExecute(@ScriptDir)
 							Return
 
@@ -123,8 +143,8 @@ Func Update($hMainGUI)
 
 						FileDelete(@ScriptDir & "\GH Injector.exe")
 
-
 						_Zip_UnzipAll($Path, @ScriptDir)
+
 						FileDelete($Path)
 
 						Run("GH Injector.exe")
@@ -138,7 +158,11 @@ Func Update($hMainGUI)
 				EndSelect
 			WEnd
 
-			GUISetState(@SW_HIDE)
+			If ($hParent <> 0) Then
+				GUISetState(@SW_ENABLE, $hParent)
+			EndIf
+
+			GUISetState(@SW_HIDE, $h_GUI_Update)
 			GUIDelete($h_GUI_Update)
 		EndIf
 	EndIf

@@ -1,5 +1,4 @@
-;FUNCTION LIST IN FILE ORDER:
-;FUNCTION LIST IN FILE ORDER:
+#Region ;FUNCTION LIST IN FILE ORDER:
 
 ;===================================================================================================
 ; Function........:  SaveSettings()
@@ -24,14 +23,24 @@
 ;
 ; Description.....:  Loads the dll file list from the settings file and passes them to the listview.
 ;
-; Parameter(s)....:  $h_DllList - Handle to the listview control.
+; Parameter(s)....:  $h_DllList - Handle to the listview control containing the dll files.
 ;===================================================================================================
+; Function........:  MakeShort($hexVal, $shortStruct)
+;
+; Description.....:  Loads the dll file list from the settings file and passes them to the listview.
+;
+; Parameter(s)....:  $hexVal 		- The 16 bit value short to be properly converted.
+;					 $shortStruct 	- A short structure created with $g_tagShort.
+;===================================================================================================
+
+#EndRegion
 
 #include "Include.au3"
 
 Func SaveSettings()
 
 	IniWrite($g_ConfigPath, "CONFIG", "PROCESS", 		      ($g_Processname			))
+	IniWrite($g_ConfigPath, "CONFIG", "PROCESSNAMELIST",      ($g_ProcessnameList		))
 	IniWrite($g_ConfigPath, "CONFIG", "PID", 			Number($g_PID					))
 	IniWrite($g_ConfigPath, "CONFIG", "PROCESSBYNAME", 	Number($g_ProcessByName			))
 	IniWrite($g_ConfigPath, "CONFIG", "DELAY", 			Number($g_InjectionDelay		))
@@ -44,6 +53,11 @@ Func SaveSettings()
 	IniWrite($g_ConfigPath, "CONFIG", "IGNOREUPDATES", 	Number($g_IgnoreUpdates			))
 	IniWrite($g_ConfigPath, "CONFIG", "PROCNAMEFILTER", 	  ($g_ProcNameFilter		))
 	IniWrite($g_ConfigPath, "CONFIG", "TOOLTIPSON",		Number($g_ToolTipsOn			))
+	IniWrite($g_ConfigPath, "CONFIG", "CURRENTSESSION",	Number($g_CurrentSession		))
+	IniWrite($g_ConfigPath, "CONFIG", "MAINGUIX", 		Number($g_MainGUI_X				))
+	IniWrite($g_ConfigPath, "CONFIG", "MAINGUIY", 		Number($g_MainGUI_Y				))
+	IniWrite($g_ConfigPath, "CONFIG", "DARKTHEME",		Number($g_DarkThemeEnabled		))
+	IniWrite($g_ConfigPath, "CONFIG", "PROCESSTYPE",	Number($g_Processtype			))
 
 EndFunc   ;==>SaveSettings
 
@@ -73,7 +87,8 @@ Func ResetSettings()
 	IniDelete($g_ConfigPath, "CONFIG")
 
 	$g_Processname 			= "Broihon.exe"
-	$g_PID					= 0
+	$g_ProcessnameList		= "Broihon.exe"
+	$g_PID					= 1337
 	$g_ProcessByName		= True
 	$g_InjectionDelay		= 0
 	$g_LastDirectory		= @DesktopDir & "\"
@@ -85,6 +100,11 @@ Func ResetSettings()
 	$g_IgnoreUpdates		= False
 	$g_ProcNameFilter		= ""
 	$g_ToolTipsOn			= True
+	$g_CurrentSession		= True
+	$g_MainGUI_X 			= 100
+	$g_MainGUI_Y			= 100
+	$g_DarkThemeEnabled		= True
+	$g_Processtype			= 0
 
 	SaveSettings()
 
@@ -98,6 +118,7 @@ Func LoadSettings()
 	EndIf
 
 	$g_Processname 			= 		(IniRead($g_ConfigPath, "CONFIG", "PROCESS", 		      ($g_Processname			)))
+	$g_ProcessnameList 		= 		(IniRead($g_ConfigPath, "CONFIG", "PROCESSNAMELIST",      ($g_ProcessnameList		)))
 	$g_PID 					= Number(IniRead($g_ConfigPath, "CONFIG", "PID", 			Number($g_PID					)))
 	$g_ProcessByName	 	= Number(IniRead($g_ConfigPath, "CONFIG", "PROCESSBYNAME", 	Number($g_ProcessByName			)))
 	$g_InjectionDelay		= Number(IniRead($g_ConfigPath, "CONFIG", "DELAY", 			Number($g_InjectionDelay		)))
@@ -110,6 +131,11 @@ Func LoadSettings()
 	$g_IgnoreUpdates 		= Number(IniRead($g_ConfigPath, "CONFIG", "IGNOREUPDATES", 	Number($g_IgnoreUpdates			)))
 	$g_ProcNameFilter 		= 		(IniRead($g_ConfigPath, "CONFIG", "PROCNAMEFILTER", 	  ($g_ProcNameFilter		)))
 	$g_ToolTipsOn 			= Number(IniRead($g_ConfigPath, "CONFIG", "TOOLTIPSON", 	Number($g_ToolTipsOn			)))
+	$g_CurrentSession		= Number(IniRead($g_ConfigPath, "CONFIG", "CURRENTSESSION", Number($g_CurrentSession		)))
+	$g_MainGUI_X			= Number(IniRead($g_ConfigPath, "CONFIG", "MAINGUIX",		Number($g_MainGUI_X				)))
+	$g_MainGUI_Y			= Number(IniRead($g_ConfigPath, "CONFIG", "MAINGUIY",		Number($g_MainGUI_Y				)))
+	$g_DarkThemeEnabled		= Number(IniRead($g_ConfigPath, "CONFIG", "DARKTHEME",		Number($g_DarkThemeEnabled		)))
+	$g_Processtype			= Number(IniRead($g_ConfigPath, "CONFIG", "PROCESSTYPE",	Number($g_Processtype			)))
 
 EndFunc   ;==>LoadSettings
 
@@ -143,3 +169,8 @@ Func LoadFiles($h_DllList)
 	Next
 
 EndFunc   ;==>LoadFiles
+
+Func MakeShort($hexVal, $shortStruct)
+	$shortStruct.short = $hexVal
+	Return $shortStruct.short
+EndFunc   ;==>MakeShort

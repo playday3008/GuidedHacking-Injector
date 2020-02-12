@@ -1,3 +1,5 @@
+#include "pch.h"
+
 #include "Handle Hijacking.h"
 
 NTSTATUS EnumHandles(char * pBuffer, ULONG Size, ULONG * SizeOut, UINT & Count);
@@ -5,7 +7,11 @@ std::vector<SYSTEM_HANDLE_TABLE_ENTRY_INFO> EnumProcessHandles();
 
 NTSTATUS EnumHandles(char * pBuffer, ULONG Size, ULONG * SizeOut, UINT & Count)
 {
-	auto p_NtQuerySystemInformation = reinterpret_cast<f_NtQuerySystemInformation>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQuerySystemInformation"));
+	auto h_nt_dll = GetModuleHandleA("ntdll.dll");
+	if (!h_nt_dll)
+		return -1;
+
+	auto p_NtQuerySystemInformation = ReCa<f_NtQuerySystemInformation>(GetProcAddress(h_nt_dll, "NtQuerySystemInformation"));
 	if (!p_NtQuerySystemInformation)
 		return -1;
 
@@ -14,7 +20,7 @@ NTSTATUS EnumHandles(char * pBuffer, ULONG Size, ULONG * SizeOut, UINT & Count)
 	if (NT_FAIL(ntRet))
 		return ntRet;
 
-	auto * pHandleInfo	= reinterpret_cast<SYSTEM_HANDLE_INFORMATION*>(pBuffer);
+	auto * pHandleInfo	= ReCa<SYSTEM_HANDLE_INFORMATION*>(pBuffer);
 	Count = pHandleInfo->NumberOfHandles;
 	
 	return ntRet;
@@ -31,7 +37,7 @@ std::vector<SYSTEM_HANDLE_TABLE_ENTRY_INFO> EnumProcessHandles()
 
 	if (NT_FAIL(ntRet))
 	{
-		while (ntRet == 0xC0000004) //STATUS_INFO_LENGTH_MISMATCH
+		while (ntRet == STATUS_INFO_LENGTH_MISMATCH)
 		{
 			delete[] pBuffer;
 			pBuffer = new char[Size];
@@ -45,7 +51,7 @@ std::vector<SYSTEM_HANDLE_TABLE_ENTRY_INFO> EnumProcessHandles()
 		}
 	}
 
-	auto * pEntry = reinterpret_cast<SYSTEM_HANDLE_INFORMATION*>(pBuffer)->Handles;
+	auto * pEntry = ReCa<SYSTEM_HANDLE_INFORMATION*>(pBuffer)->Handles;
 	for (UINT i = 0; i != Count; ++i)
 		if (pEntry[i].ObjectTypeIndex == OTI_Process)
 			Ret.push_back(pEntry[i]);
@@ -55,15 +61,15 @@ std::vector<SYSTEM_HANDLE_TABLE_ENTRY_INFO> EnumProcessHandles()
 	return Ret;
 }
 
-std::vector <handle_data> FindProcessHandles(DWORD TargetPID, DWORD WantedHandleAccess)
+std::vector<handle_data> FindProcessHandles(DWORD TargetPID, DWORD WantedHandleAccess)
 {
-	std::vector <handle_data> Ret;
+	std::vector<handle_data> Ret;
 	DWORD OwnerPID		= 0;
 	HANDLE hOwnerProc	= nullptr;
 
 	for (auto i : EnumProcessHandles())
 	{
-		if (OwnerPID != i.UniqueProcessId)
+		if (OwnerPID != i.UniqueProcessId && i.UniqueProcessId != TargetPID && i.UniqueProcessId != GetCurrentProcessId())
 		{
 			if (hOwnerProc)
 				CloseHandle(hOwnerProc);
@@ -78,7 +84,7 @@ std::vector <handle_data> FindProcessHandles(DWORD TargetPID, DWORD WantedHandle
 			continue;
 		
 		HANDLE hDup		= nullptr;
-		HANDLE hOrig	= reinterpret_cast<HANDLE>(i.HandleValue);
+		HANDLE hOrig	= ReCa<HANDLE>(i.HandleValue);
 		NTSTATUS ntRet	= DuplicateHandle(hOwnerProc, hOrig, GetCurrentProcess(), &hDup, PROCESS_QUERY_LIMITED_INFORMATION, 0, 0);
 		if (NT_FAIL(ntRet))
 			continue;
@@ -87,7 +93,7 @@ std::vector <handle_data> FindProcessHandles(DWORD TargetPID, DWORD WantedHandle
 		{
 			Ret.push_back(handle_data{ OwnerPID, i.HandleValue, i.GrantedAccess });
 		}
-			
+		
 		CloseHandle(hDup);
 	}
 

@@ -1,6 +1,10 @@
 #pragma once
 
-#include <Windows.h>
+#ifndef _WIN32
+#error Rly?
+#endif
+
+#include "pch.h"
 
 #ifndef NT_FAIL
 	#define NT_FAIL(status) (status < 0)
@@ -13,6 +17,8 @@
 #define THREAD_CREATE_FLAGS_CREATE_SUSPENDED	0x00000001
 #define THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH  0x00000002
 #define THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER	0x00000004
+
+#define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
 
 struct UNICODE_STRING
 {
@@ -70,14 +76,15 @@ struct PROCESS_SESSION_INFORMATION
 enum _PROCESSINFOCLASS
 {
 	ProcessBasicInformation		= 0,
-	ProcessSessionInformation	= 24
+	ProcessSessionInformation	= 24,
+	ProcessWow64Information		= 26
 };
 typedef _PROCESSINFOCLASS PROCESSINFOCLASS;
 
 enum _SYSTEM_INFORMATION_CLASS
 {
-	SystemProcessInformation = 5,
-	SystemHandleInformation = 16
+	SystemProcessInformation	= 5,
+	SystemHandleInformation		= 16
 };
 typedef _SYSTEM_INFORMATION_CLASS SYSTEM_INFORMATION_CLASS;
 
@@ -161,46 +168,46 @@ typedef _OBEJECT_TYPE_INDEX OBJECT_TYPE_INDEX;
 
 enum THREAD_STATE
 {
-    Running = 2,
-    Waiting = 5,
+    Running = 0x02,
+    Waiting = 0x05
 };
 
 typedef enum _KWAIT_REASON
 {
-	Executive			= 0,
-	FreePage			= 1,
-	PageIn				= 2,
-	PoolAllocation		= 3,
-	DelayExecution		= 4,
-	Suspended			= 5,
-	UserRequest			= 6,
-	WrExecutive			= 7,
-	WrFreePage			= 8,
-	WrPageIn			= 9,
-	WrPoolAllocation	= 10,
-	WrDelayExecution	= 11,
-	WrSuspended			= 12,
-	WrUserRequest		= 13,
-	WrEventPair			= 14,
-	WrQueue				= 15,
-	WrLpcReceive		= 16,
-	WrLpcReply			= 17,
-	WrVirtualMemory		= 18,
-	WrPageOut			= 19,
-	WrRendezvous		= 20,
-	WrCalloutStack		= 25,
-	WrKernel			= 26,
-	WrResource			= 27,
-	WrPushLock			= 28,
-	WrMutex				= 29,
-	WrQuantumEnd		= 30,
-	WrDispatchInt		= 31,
-	WrPreempted			= 32,
-	WrYieldExecution	= 33,
-	WrFastMutex			= 34,
-	WrGuardedMutex		= 35,
-	WrRundown			= 36,
-	MaximumWaitReason	= 37
+	Executive			= 0x00,
+	FreePage			= 0x01,
+	PageIn				= 0x02,
+	PoolAllocation		= 0x03,
+	DelayExecution		= 0x04,
+	Suspended			= 0x05,
+	UserRequest			= 0x06,
+	WrExecutive			= 0x07,
+	WrFreePage			= 0x08,
+	WrPageIn			= 0x09,
+	WrPoolAllocation	= 0x0A,
+	WrDelayExecution	= 0x0B,
+	WrSuspended			= 0x0C,
+	WrUserRequest		= 0x0D,
+	WrEventPair			= 0x0E,
+	WrQueue				= 0x0F,
+	WrLpcReceive		= 0x10,
+	WrLpcReply			= 0x11,
+	WrVirtualMemory		= 0x12,
+	WrPageOut			= 0x13,
+	WrRendezvous		= 0x14,
+	WrCalloutStack		= 0x19,
+	WrKernel			= 0x1A,
+	WrResource			= 0x1B,
+	WrPushLock			= 0x1C,
+	WrMutex				= 0x1D,
+	WrQuantumEnd		= 0x1E,
+	WrDispatchInt		= 0x1F,
+	WrPreempted			= 0x20,
+	WrYieldExecution	= 0x21,
+	WrFastMutex			= 0x22,
+	WrGuardedMutex		= 0x23,
+	WrRundown			= 0x24,
+	MaximumWaitReason	= 0x25
 } KWAIT_REASON;
 
 typedef struct _CLIENT_ID
@@ -307,9 +314,9 @@ struct PEB32
 
 #endif
 
-using f_NtCreateThreadEx			= NTSTATUS	(__stdcall*)(HANDLE * pHandle, ACCESS_MASK DesiredAccess, void * pAttr, HANDLE hProc, void * pFunc, void * pArg,
+using f_NtCreateThreadEx			= NTSTATUS	(__stdcall*)(HANDLE * pHandle, ACCESS_MASK DesiredAccess, void * pAttr, HANDLE hTargetProc, void * pFunc, void * pArg,
 										ULONG Flags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaxStackSize, void * pAttrListOut);
 using f_LdrLoadDll					= NTSTATUS	(__stdcall*)(wchar_t * szOptPath, ULONG ulFlags, UNICODE_STRING * pModuleFileName, HANDLE * pOut);
-using f_NtQueryInformationProcess	= NTSTATUS	(__stdcall*)(HANDLE hProc, PROCESSINFOCLASS PIC, void * pBuffer, ULONG BufferSize, ULONG * SizeOut);
+using f_NtQueryInformationProcess	= NTSTATUS	(__stdcall*)(HANDLE hTargetProc, PROCESSINFOCLASS PIC, void * pBuffer, ULONG BufferSize, ULONG * SizeOut);
 using f_NtQuerySystemInformation	= NTSTATUS	(__stdcall*)(SYSTEM_INFORMATION_CLASS SIC, void * pBuffer, ULONG BufferSize, ULONG * SizeOut);
 using f_RtlQueueApcWow64Thread		= NTSTATUS	(__stdcall*)(HANDLE hThread, void * pRoutine, void * pArg1, void * pArg2, void * pArg3);
